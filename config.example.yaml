@@ -11,6 +11,7 @@ schedule:
   at: "02:30"
 
 budget:
+  monthly_credits_usd: 100.0   # crediti API inclusi nel piano: `status` avvisa se la proiezione li supera
   per_night_usd: 3.0
   per_task_usd: 0.80
   triage_per_repo_usd: 0.10
@@ -23,6 +24,19 @@ models:
   triage: claude-haiku-5-5
   fix: claude-sonnet-5-5
   hunt: claude-opus-5-5
+
+anthropic:
+  timeout_s: 600
+  max_retries: 4              # 429, 5xx e overloaded, con backoff dell'SDK
+  # Su un rifiuto dei classificatori la richiesta riparte lato server su un altro modello
+  # (solo Opus 5.5 e Sonnet 5.5). Il costo si conta al prezzo del modello che ha risposto;
+  # se non è in prices_usd_per_mtok, al prezzo più alto noto.
+  refusal_fallback: true
+  fallback_models: [claude-opus-5-5, claude-sonnet-5-5]
+  effort:
+    claude-haiku-5-5: low
+    claude-sonnet-5-5: medium
+    claude-opus-5-5: high
 
 # Attivazione a fasi: CVE (fase 2), SAST (fase 3), bug hunting (fase 4).
 features:

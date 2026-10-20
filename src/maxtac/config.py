@@ -70,6 +70,7 @@ class ScheduleConf(_Model):
 
 
 class BudgetConf(_Model):
+    monthly_credits_usd: float = Field(default=100.0, gt=0)  # crediti API inclusi nel piano
     per_night_usd: float = Field(default=3.0, gt=0)
     per_task_usd: float = Field(default=0.80, gt=0)
     triage_per_repo_usd: float = Field(default=0.10, gt=0)
@@ -83,6 +84,25 @@ class ModelsConf(_Model):
     triage: str = "claude-haiku-5-5"
     fix: str = "claude-sonnet-5-5"
     hunt: str = "claude-opus-5-5"
+
+
+Effort = Literal["low", "medium", "high", "xhigh", "max"]
+
+
+def _default_effort() -> dict[str, Effort]:
+    return {"claude-haiku-5-5": "low", "claude-sonnet-5-5": "medium", "claude-opus-5-5": "high"}
+
+
+class AnthropicConf(_Model):
+    timeout_s: float = Field(default=600.0, gt=0)
+    max_retries: int = Field(default=4, ge=0, le=10)  # 429, 5xx e overloaded, con backoff
+    # Su un rifiuto dei classificatori la richiesta riparte su un altro modello lato server
+    # (Opus 5.5 e Sonnet 5.5). Il costo si conta al prezzo del modello che ha risposto.
+    refusal_fallback: bool = True
+    fallback_models: list[str] = Field(
+        default_factory=lambda: ["claude-opus-5-5", "claude-sonnet-5-5"]
+    )
+    effort: dict[str, Effort] = Field(default_factory=_default_effort)
 
 
 class HuntingConf(_Model):
@@ -138,6 +158,7 @@ class AppConfig(_Model):
     schedule: ScheduleConf = ScheduleConf()
     budget: BudgetConf = BudgetConf()
     models: ModelsConf = ModelsConf()
+    anthropic: AnthropicConf = AnthropicConf()
     hunting: HuntingConf = HuntingConf()
     features: FeaturesConf = FeaturesConf()
     vcs: VCSConf = VCSConf()

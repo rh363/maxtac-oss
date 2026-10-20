@@ -46,3 +46,10 @@ def test_nights_are_separate(budget_port, clock):
     b = NightBudget(budget_port, PRICING, "b", 3.0, clock)
     a.charge("t", "claude-haiku-5-5", Usage(input_tokens=1_000_000))
     assert a.spent == pytest.approx(0.10) and b.spent == 0
+
+
+def test_conservative_cost_uses_highest_known_price():
+    usd, known = PRICING.cost_conservative("claude-ignoto", Usage(input_tokens=1_000_000))
+    assert not known and usd == pytest.approx(4.0)
+    usd, known = PRICING.cost_conservative("claude-haiku-5-5", Usage(input_tokens=1_000_000))
+    assert known and usd == pytest.approx(0.10)

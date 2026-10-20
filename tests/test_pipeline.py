@@ -408,3 +408,35 @@ def test_hunting_cap_shared_across_repos(world):
     assert a.hunted and not a.errors
     assert b.errors and "bug hunting saltato" in b.errors[0]
     assert len(w.llm.structured_calls) == 1
+
+
+def test_llm_unavailable_stops_the_night_without_attempts(world):
+    from maxtac.domain.ports import LLMUnavailable
+
+    w = world(
+        turns=[LLMUnavailable("crediti API esauriti")],
+        repos=[repo("alex/ecs2"), repo("alex/fwagent")],
+    )
+    report = w.run()
+    assert report.aborted and "crediti" in report.aborted
+    first, second = report.repos
+    assert first.fixes == [] and any("crediti" in e for e in first.errors)
+    assert second.findings_total == 0 and second.errors[0].startswith("non eseguito")
+    # nessun tentativo contato: i finding restano nuovi e riprovabili la notte dopo
+    for f in cve_findings():
+        rec = w.store.get(f.fingerprint)
+        assert rec.status is FindingStatus.NEW and rec.attempts == 0
+    assert w.gl.mrs == []
+
+
+def test_unpriced_fallback_model_is_charged_at_highest_price(world):
+    from maxtac.domain.models import AssistantTurn, Usage
+
+    turns = bump_turns()
+    turns[-1] = AssistantTurn("ok", (), "end_turn", Usage(input_tokens=100_000), "claude-nuovo")
+    w = world(turns=turns)
+    report = w.run()
+    [fx] = report.repos[0].fixes
+    assert fx.outcome is Outcome.MR_OPENED
+    # 100k token al prezzo più alto noto (Opus: 4$/MTok) = 0,40$
+    assert fx.cost_usd >= 0.40

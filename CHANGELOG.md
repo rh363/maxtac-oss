@@ -26,5 +26,21 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 - Dockerfile dell'orchestrator e dei sandbox, proxy squid con allowlist, `docker-compose.yml`,
   script di ricostruzione settimanale dell'immagine dei sandbox.
 - Config: identità del bot, parametri del sandbox, ruleset semgrep per linguaggio.
+- Fase 2: `AnthropicLLM` sulla Messages API: structured output con JSON schema per triage e
+  bug hunting, turni del loop agentico rimandati identici (thinking compresi), prompt caching
+  su tool, system e ultimo messaggio, fallback lato server sui rifiuti per Opus e Sonnet 5.5,
+  `effort` per modello, timeout e retry configurabili.
+- `run` e `patrol` funzionano end-to-end con gli adapter reali; `patrol` sopravvive a una run
+  fallita e ricostruisce la pipeline a ogni notte.
+- Crediti esauriti o chiave rifiutata fermano la notte in modo pulito (`LLMUnavailable`),
+  senza contare tentativi sui finding; il report riporta il motivo.
+- `status` mostra la spesa del mese rispetto a `budget.monthly_credits_usd`, la proiezione a fine
+  mese e un avviso se la supera.
+- Test d'integrazione della Fase 2 con git reale: dipendenza vulnerabile → MR con il bump pushato.
+
+### Changed
+
+- Una chiamata servita da un modello senza prezzo in config (fallback lato server) si conta al
+  prezzo più alto noto invece di fallire dopo aver già speso.
 
 [Unreleased]: https://github.com/rh363/maxtac-oss/commits/main

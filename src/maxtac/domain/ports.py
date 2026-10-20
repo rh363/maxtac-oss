@@ -23,6 +23,13 @@ from .models import (
 )
 
 
+class LLMUnavailable(Exception):
+    """Il modello non è utilizzabile per il resto della notte (crediti finiti, chiave rifiutata).
+
+    Non è colpa del finding: la pipeline si ferma senza contare tentativi.
+    """
+
+
 class VCSPort(Protocol):
     def checkout(self, repo: RepoConfig, workdir: Path) -> Checkout: ...
 
@@ -86,7 +93,7 @@ class LLMPort(Protocol):
         tool: ToolSpec,
         max_tokens: int,
     ) -> StructuredResult:
-        """Una chiamata con output JSON forzato tramite un unico tool obbligatorio."""
+        """Una chiamata con output JSON vincolato allo schema di `tool` (structured output)."""
         ...
 
     def turn(

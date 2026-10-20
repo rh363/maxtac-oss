@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from maxtac.adapters.anthropic_llm import AnthropicLLM
 from maxtac.adapters.docker_sandbox import DockerSandbox, SandboxSpec
 from maxtac.adapters.gitlab_vcs import GitLabVCS
 from maxtac.adapters.scanners import build_scanners
@@ -15,10 +16,6 @@ from maxtac.config import AppConfig, Secrets, load_secrets
 from maxtac.domain.ports import ScannerPort
 from maxtac.services.pipeline import Pipeline
 from maxtac.services.scan import ScanService
-
-
-class AdapterNotAvailable(RuntimeError):
-    """L'adapter richiesto arriva in una fase successiva del piano."""
 
 
 class MissingSecret(RuntimeError):
@@ -84,12 +81,34 @@ class Container:
             workdir=self.config.workdir,
         )
 
+    def llm(self) -> AnthropicLLM:
+        key = self.secrets.anthropic_api_key
+        if key is None or not key.get_secret_value().strip():
+            raise MissingSecret(
+                "chiave Anthropic mancante (/run/secrets/anthropic_api_key o ANTHROPIC_API_KEY)"
+            )
+        a = self.config.anthropic
+        return AnthropicLLM.from_api_key(
+            key.get_secret_value().strip(),
+            timeout_s=a.timeout_s,
+            max_retries=a.max_retries,
+            effort=a.effort,
+            refusal_fallback=a.refusal_fallback,
+            fallback_models=a.fallback_models,
+        )
+
     def pipeline(self, *, dry_run: bool) -> Pipeline:
         """Pipeline completa con gli adapter reali, segreti letti da Secrets()."""
-        # Fase 2: AnthropicLLM. Fino ad allora solo `run --scan-only`.
-        raise AdapterNotAvailable(
-            "l'adapter Anthropic non è ancora disponibile (arriva nella fase 2): "
-            "usa `run --scan-only` per checkout e scan"
+        return Pipeline(
+            vcs=self.vcs(),
+            sandboxes=self.sandboxes(),
+            scanners=self.scanners(),
+            llm=self.llm(),
+            store=self.store,
+            budget=self.budget,
+            pricing=self.config.to_pricing(),
+            settings=self.config.to_settings(dry_run=dry_run),
+            clock=self.clock,
         )
 
     def close(self) -> None:

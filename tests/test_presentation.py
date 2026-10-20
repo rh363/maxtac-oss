@@ -76,9 +76,59 @@ def test_status_theme_per_user(config, capsys):
     assert not THEMED.search(capsys.readouterr().out)
 
 
-def test_run_without_adapters_fails_clearly(config, capsys):
-    assert cli.main(["--config", str(config), "--as", "capo", "run", "--dry-run"]) == 3
-    assert "--scan-only" in capsys.readouterr().err
+def test_run_without_api_key_fails_clearly(config, capsys, monkeypatch):
+    monkeypatch.setenv("GITLAB_TOKEN", "glpat-test")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert cli.main(["--config", str(config), "--as", "capo", "run", "--dry-run"]) == 2
+    err = capsys.readouterr().err
+    assert "chiave Anthropic mancante" in err and "glpat-test" not in err
+
+
+def test_status_shows_monthly_credits_and_projection(config, capsys, monkeypatch):
+    from datetime import UTC, datetime
+
+    from maxtac.container import Container
+
+    fixed = datetime(2026, 10, 10, 12, tzinfo=UTC)
+    real_build = Container.build.__func__
+
+    def build(cls, cfg):
+        c = real_build(cls, cfg)
+        c.clock = lambda: fixed
+        return c
+
+    monkeypatch.setattr(Container, "build", classmethod(build))
+    cfg = cli.load_config(config)
+    c = Container.build(cfg)
+    c.budget.record("r1", "fix:a", "claude-sonnet-5-5", 40.0, fixed)
+    c.close()
+    assert cli.main(["--config", str(config), "--as", "capo", "status"]) == 0
+    out = capsys.readouterr().out
+    assert "$40.00 su $100.00 di crediti" in out
+    assert "proiezione a fine mese" in out and "ATTENZIONE" in out  # 40$ in 10 giorni → 124$
+
+
+def test_patrol_survives_a_failing_run(config, monkeypatch, caplog):
+    from maxtac.container import Container
+
+    cfg = cli.load_config(config)
+    c = Container.build(cfg)
+
+    def boom(*, dry_run):
+        raise RuntimeError("docker giù")
+
+    monkeypatch.setattr(c, "pipeline", boom)
+    slept: list[float] = []
+    cli.patrol_once(c, cli.lexicon("neutral"), sleep=lambda s: slept.append(s) or _advance(c))
+    assert "run fallita" in caplog.text
+    c.close()
+
+
+def _advance(c):
+    from datetime import timedelta
+
+    now = c.clock() + timedelta(days=1)
+    c.clock = lambda: now
 
 
 def test_missing_config(tmp_path, capsys):

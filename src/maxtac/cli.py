@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import calendar
 import getpass
 import logging
 import os
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from maxtac.config import DEFAULT_CONFIG_PATH, AppConfig, load_config
-from maxtac.container import AdapterNotAvailable, Container, MissingSecret
+from maxtac.container import Container, MissingSecret
 from maxtac.domain.models import RepoConfig, RunReport
 from maxtac.domain.policy import next_run_at
 from maxtac.presentation.lexicon import NEUTRAL, Lexicon, lexicon
@@ -113,20 +114,26 @@ def cmd_run(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
     return 0 if all(not r.errors for r in report.repos) else 1
 
 
-def cmd_patrol(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
+def patrol_once(c: Container, lx: Lexicon, sleep: Callable[[float], None] = time.sleep) -> None:
+    """Aspetta il prossimo orario e lancia una run. Un'eccezione non ferma lo scheduler."""
     sched = c.config.schedule
-    pipeline = c.pipeline(dry_run=False)  # fallisce subito se gli adapter mancano
+    when = next_run_at(c.clock(), sched.at, sched.timezone)
+    log.info("prossima %s: %s", lx.run, when.isoformat())
+    while (delay := (when - c.clock()).total_seconds()) > 0:
+        sleep(min(delay, 300))
+    try:
+        # la pipeline si ricostruisce a ogni notte: segreti e config ruotati vengono riletti
+        report = c.pipeline(dry_run=False).run_night(c.config.to_repos())
+        print(render_run(report, lx), flush=True)
+        _write_report(c.config, report)
+    except Exception:
+        log.exception("run fallita, riprovo alla prossima finestra")
+
+
+def cmd_patrol(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
+    c.pipeline(dry_run=False)  # fallisce subito se mancano segreti o config
     while True:
-        when = next_run_at(c.clock(), sched.at, sched.timezone)
-        print(f"prossima {lx.run}: {when.isoformat()}", flush=True)
-        while (delay := (when - c.clock()).total_seconds()) > 0:
-            time.sleep(min(delay, 300))
-        try:
-            report = pipeline.run_night(c.config.to_repos())
-            print(render_run(report, lx), flush=True)
-            _write_report(c.config, report)
-        except Exception:
-            log.exception("run fallita")
+        patrol_once(c, lx)
 
 
 def cmd_status(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
@@ -136,6 +143,9 @@ def cmd_status(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
         render_status(
             lx,
             month_spent=c.budget.spent_month(now.year, now.month),
+            credits_usd=c.config.budget.monthly_credits_usd,
+            day_of_month=now.day,
+            days_in_month=calendar.monthrange(now.year, now.month)[1],
             month_label=now.strftime("%Y-%m"),
             counts=c.store.counts_by_status(),
             open_mrs=c.store.open_mrs(),
@@ -163,9 +173,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     c = Container.build(cfg)
     try:
         return COMMANDS[args.command](c, args, lx)
-    except AdapterNotAvailable as e:
-        print(f"{lx.product}: {e}", file=sys.stderr)
-        return 3
     except MissingSecret as e:
         print(f"{lx.product}: {e}", file=sys.stderr)
         return 2

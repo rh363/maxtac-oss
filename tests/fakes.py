@@ -254,7 +254,7 @@ class ScriptedLLM:
 
     def __init__(
         self,
-        turns: Sequence[AssistantTurn] = (),
+        turns: Sequence[AssistantTurn | Exception] = (),
         structured_fn: StructuredFn | None = None,
         structured_usage: Usage = Usage(input_tokens=5_000, output_tokens=500),
     ) -> None:
@@ -284,7 +284,10 @@ class ScriptedLLM:
         self.turn_calls.append(list(messages))
         if not self.turns:
             raise AssertionError("ScriptedLLM: turni finiti")
-        return self.turns.pop(0)
+        nxt = self.turns.pop(0)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return nxt
 
 
 def fix_all(model: str, prompt: str, tool: ToolSpec) -> dict[str, Any]:

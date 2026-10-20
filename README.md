@@ -12,7 +12,7 @@ spesa espliciti.
 | --- | --- | --- |
 | 0 | Dominio, porte, policy, config, store SQLite, adapter finti, CLI | fatta |
 | 1 | Immagine sandbox, `DockerSandbox`, parser degli scanner, proxy, checkout con git hardening, `GitLabVCS` | fatta |
-| 2 | CVE end-to-end: triage, fix agent, verifica, MR (`AnthropicLLM`) | da fare |
+| 2 | CVE end-to-end: triage, fix agent, verifica, MR (`AnthropicLLM`) | fatta |
 | 3 | Finding SAST | da fare |
 | 4 | Bug hunting a rotazione sul diff recente | da fare |
 
@@ -25,7 +25,7 @@ Per ogni repo, in sequenza (un repo che fallisce non blocca gli altri):
 3. dedup contro lo storico: si scartano finding ignorati, già con MR aperta, già passati a un
    umano o falliti troppe volte. Una MR chiusa senza merge conta come rifiuto;
 4. le CVE dello stesso package diventano un solo task (un solo bump);
-5. triage (Haiku): una chiamata per repo, risposta JSON forzata: `fix`, `ignore`, `needs_human`.
+5. triage (Haiku): una chiamata per repo, risposta JSON vincolata da schema: `fix`, `ignore`, `needs_human`.
    Un task senza verdetto valido va a un umano;
 6. fix agent (Sonnet): loop agentico proprio sulla Messages API, tool eseguiti solo nel sandbox;
 7. verifica indipendente in un sandbox nuovo: setup, test, rescan dello scanner d'origine.
@@ -44,7 +44,7 @@ adapter finti, senza rete.
 src/maxtac/
 ├── domain/        models, ports (Protocol), policy (regole pure), budget (prezzi e tetti)
 ├── services/      pipeline, triage, fix agent, bug hunting, testo delle MR
-├── adapters/      sqlite_store, gitlab_vcs, docker_sandbox, scanners; anthropic (fase 2)
+├── adapters/      sqlite_store, gitlab_vcs, docker_sandbox, scanners, anthropic_llm
 ├── presentation/  lessici e report per l'operatore
 ├── config.py      YAML + Docker secret
 ├── container.py   composition root
@@ -69,7 +69,27 @@ Prezzi e tetti stanno in config, non nel codice: il costo di ogni chiamata si ca
 `usage`. Tetti: per notte, per task, per il triage di un repo, per il bug hunting, MR per notte,
 iterazioni del loop, tentativi per finding. Il controllo avviene prima di ogni chiamata, quindi
 una notte può superare il tetto al massimo del costo di una singola chiamata.
-Un modello senza prezzo in config blocca l'avvio.
+Un modello configurato senza prezzo blocca l'avvio. Se il fallback lato server risponde con un
+modello che non è in config, la chiamata si conta al prezzo più alto noto (meglio sovrastimare).
+`budget.monthly_credits_usd` (default 100) serve a `status`, che mostra la spesa del mese, la
+proiezione a fine mese e un avviso se la proiezione supera i crediti.
+
+Se i crediti API finiscono, o la chiave viene rifiutata, la notte si ferma subito e in modo
+pulito: i task restanti non partono, nessun tentativo viene contato sui finding e il report
+dice perché. La notte dopo si riparte normalmente.
+
+### Chiamate al modello
+
+- Loop agentico proprio sulla Messages API: l'adapter fa un passo alla volta, il loop sta in
+  `services/ripperdoc.py`. I turni dell'assistente si rimandano identici (thinking compresi):
+  la storia è append-only.
+- Triage e bug hunting usano structured output (`output_config.format` con JSON schema), non un
+  `tool_choice` forzato, che Opus 5.5 e Sonnet 5.5 rifiutano.
+- Prompt caching: breakpoint dopo le definizioni dei tool e il system prompt (identici tra
+  task) e sull'ultimo messaggio utente, così il loop rilegge la storia dalla cache.
+- Retry con backoff dell'SDK su 429, 5xx e overloaded; `effort` per modello da config.
+- Ottimizzazione futura: il triage può passare alla Batch API (-50% su input e output), visto
+  che di notte la latenza non conta.
 
 ## Sicurezza in breve
 
@@ -90,7 +110,7 @@ uv run ruff check src tests && uv run mypy src
 cp config.example.yaml config.yaml   # adatta workdir e db_path per l'uso locale
 uv run maxtac --config config.yaml status
 GITLAB_TOKEN=... uv run maxtac --config config.yaml run --repo alex/ecs2 --scan-only
-uv run maxtac --config config.yaml run --repo alex/ecs2 --dry-run   # dalla fase 2
+ANTHROPIC_API_KEY=... GITLAB_TOKEN=... uv run maxtac --config config.yaml run --repo alex/ecs2 --dry-run
 ```
 
 Il test d'integrazione con un Docker reale è skippato di default:
@@ -104,8 +124,9 @@ Comandi:
 - `maxtac patrol`: resta in esecuzione e lancia la run all'ora configurata (`schedule`);
 - `maxtac status`: spesa del mese, finding tracciati, MR aperte.
 
-Fino alla fase 2 `run` (senza `--scan-only`) e `patrol` escono con codice 3: manca l'adapter
-Anthropic. Senza token GitLab il codice d'uscita è 2.
+Senza token GitLab o chiave Anthropic il codice d'uscita è 2, con un messaggio che dice cosa
+manca (mai il valore). `patrol` sopravvive a una run fallita: logga l'errore e aspetta la
+finestra successiva, ricostruendo la pipeline a ogni notte.
 
 ## Temi di presentazione
 
@@ -128,6 +149,23 @@ docker compose --profile build build sandbox-image          # immagine dei sandb
 docker compose up -d --build                                # orchestrator + proxy
 docker compose run --rm orchestrator run --scan-only        # prova a costo zero
 ```
+
+### Primo avvio, passo per passo
+
+1. **Bot GitLab.** Crea l'utente bot, aggiungilo ai progetti con ruolo Developer e genera un
+   token con scope `api`. Mettilo in `secrets/gitlab_token`.
+2. **Chiave Anthropic.** Dalla Console dell'organizzazione collegata ai crediti del piano, senza
+   auto-reload. Mettila in `secrets/anthropic_api_key`.
+3. **Config.** `config.yaml` da `config.example.yaml`: URL di GitLab, repo con `setup_command` e
+   `test_command`, tetti di spesa, `ui.themes` se serve. Le feature partono con solo `cve`.
+4. **Build.** Immagine dei sandbox e poi orchestrator e proxy (comandi sopra).
+5. **Scan a costo zero.** `run --scan-only`: controlla che i finding normalizzati abbiano senso.
+6. **Dry-run.** `run --dry-run` su un repo reale: spende crediti, ma non fa push né MR e non
+   cambia lo stato dei finding. Leggi `workdir/<run_id>/report.md` e i diff in `diffs/`.
+7. **Run vera.** Prima su un repo di prova con una dipendenza vulnerabile apposta:
+   `run --repo gruppo/prova`. La MR deve arrivare con i test verdi.
+8. **Notturno.** `docker compose up -d`: l'orchestrator resta in `patrol` e lancia la run
+   all'ora di `schedule`. `status` mostra spesa del mese, proiezione e MR aperte.
 
 | Componente | Cosa fa |
 | --- | --- |

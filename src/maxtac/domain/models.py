@@ -210,6 +210,9 @@ class AssistantTurn:
     stop_reason: Literal["end_turn", "tool_use", "max_tokens", "refusal", "other"]
     usage: Usage
     model: str
+    # Blocchi originali del provider (thinking compresi), da rimandare identici al turno dopo.
+    # Il dominio non li legge: servono solo all'adapter.
+    raw: tuple[Any, ...] = ()
 
 
 Message = UserText | ToolResults | AssistantTurn
@@ -267,6 +270,7 @@ class RunReport:
     repos: list[RepoReport] = field(default_factory=list)
     spent_usd: float = 0.0
     night_cap_usd: float = 0.0
+    aborted: str | None = None  # motivo per cui la notte si è fermata prima (es. crediti finiti)
 
     @property
     def mrs_opened(self) -> list[FixResult]:

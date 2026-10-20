@@ -20,8 +20,10 @@ def render_run(report: RunReport, lx: Lexicon) -> str:
         "",
         f"- {lx.mr_open}: {len(report.mrs_opened)}",
         f"- {lx.spend}: {lx.money(report.spent_usd)} su {lx.money(report.night_cap_usd)}",
-        "",
     ]
+    if report.aborted:
+        lines.append(f"- interrotta: {report.aborted}")
+    lines.append("")
     for r in report.repos:
         lines += [
             f"## {r.project}",
@@ -56,6 +58,9 @@ def render_status(
     counts: dict[str, int],
     open_mrs: list[dict[str, Any]],
     next_run: str,
+    credits_usd: float | None = None,
+    day_of_month: int | None = None,
+    days_in_month: int | None = None,
 ) -> str:
     total = sum(counts.values())
     # una MR può coprire più finding (CVE dello stesso package): una riga per MR
@@ -63,12 +68,18 @@ def render_status(
     lines = [
         f"{lx.product}: {lx.tagline}",
         "",
-        f"{lx.spend} ({month_label}): {lx.money(month_spent)}",
+        f"{lx.spend} ({month_label}): {lx.money(month_spent)}"
+        + (f" su {lx.money(credits_usd)} di crediti" if credits_usd else ""),
         f"prossima {lx.run}: {next_run}",
         f"{lx.findings} tracciati: {total}"
         + (" (" + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())) + ")" if total else ""),
         f"{lx.mr_open}: {len(by_mr)}",
     ]
+    if credits_usd and day_of_month and days_in_month:
+        projected = month_spent / day_of_month * days_in_month
+        lines.insert(3, f"proiezione a fine mese: {lx.money(projected)}")
+        if projected > credits_usd:
+            lines.insert(4, "ATTENZIONE: la proiezione supera i crediti del mese")
     for mr in by_mr.values():
         lines.append(f"  - {mr['kind']} {mr['rule']} {mr['location']}: {mr['mr_url'] or '-'}")
     return "\n".join(lines)

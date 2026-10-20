@@ -35,6 +35,7 @@ from maxtac.domain.ports import (
     BudgetPort,
     FindingStore,
     LLMPort,
+    LLMUnavailable,
     Sandbox,
     SandboxPort,
     ScannerPort,
@@ -130,8 +131,16 @@ class Pipeline:
 
         for repo in repos:
             rr = RepoReport(repo.project)
+            if report.aborted:
+                rr.errors.append(f"non eseguito: {report.aborted}")
+                report.repos.append(rr)
+                continue
             try:
                 self._run_repo(repo, night, rr, hunt=repo.project in hunt)
+            except LLMUnavailable as e:  # crediti finiti o chiave rifiutata: fine della notte
+                log.error("modello non disponibile, run interrotta: %s", e)
+                report.aborted = f"modello non disponibile: {e}"
+                rr.errors.append(report.aborted)
             except Exception as e:  # un repo che fallisce non blocca gli altri
                 log.exception("repo %s fallito", repo.project)
                 rr.errors.append(f"{type(e).__name__}: {e}")
@@ -300,6 +309,8 @@ class Pipeline:
         except SetupFailed as e:
             # problema d'ambiente, non del finding: nessun tentativo consumato
             return FixResult(task, Outcome.ERROR, meter.spent, str(e), branch)
+        except LLMUnavailable:
+            raise
         except Exception as e:
             log.exception("task %s fallito", task.fingerprint)
             return FixResult(task, Outcome.ERROR, meter.spent, f"{type(e).__name__}: {e}", branch)
