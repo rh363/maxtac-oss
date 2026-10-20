@@ -78,7 +78,7 @@ def test_status_theme_per_user(config, capsys):
 
 def test_run_without_adapters_fails_clearly(config, capsys):
     assert cli.main(["--config", str(config), "--as", "capo", "run", "--dry-run"]) == 3
-    assert "non sono ancora disponibili" in capsys.readouterr().err
+    assert "--scan-only" in capsys.readouterr().err
 
 
 def test_missing_config(tmp_path, capsys):

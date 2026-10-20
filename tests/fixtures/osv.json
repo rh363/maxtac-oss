@@ -1,0 +1,95 @@
+{
+  "results": [
+    {
+      "source": {"path": "/work/requirements.txt", "type": "lockfile"},
+      "packages": [
+        {
+          "package": {"name": "requests", "version": "2.19.0", "ecosystem": "PyPI"},
+          "vulnerabilities": [
+            {
+              "modified": "2024-09-24T21:03:26Z",
+              "published": "2018-10-29T19:06:46Z",
+              "schema_version": "1.6.0",
+              "id": "GHSA-x84v-xcm2-53pg",
+              "aliases": ["CVE-2018-18074"],
+              "related": ["PYSEC-2018-28"],
+              "summary": "Insufficiently Protected Credentials in Requests",
+              "details": "The Requests package before 2.20.0 for Python sends an HTTP Authorization header to an http URI upon receiving a same-hostname https-to-http redirect.",
+              "affected": [
+                {
+                  "package": {"ecosystem": "PyPI", "name": "requests", "purl": "pkg:pypi/requests"},
+                  "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "2.20.0"}]}]
+                }
+              ],
+              "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"}],
+              "database_specific": {"cwe_ids": ["CWE-522"], "github_reviewed": true, "severity": "HIGH"}
+            },
+            {
+              "id": "PYSEC-2018-28",
+              "aliases": ["CVE-2018-18074", "GHSA-x84v-xcm2-53pg"],
+              "summary": "",
+              "details": "The Requests package before 2.20.0 ...",
+              "affected": [
+                {
+                  "package": {"ecosystem": "PyPI", "name": "requests"},
+                  "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "2.20.0"}]}]
+                }
+              ]
+            },
+            {
+              "id": "GHSA-9wx4-h78v-vm56",
+              "aliases": ["CVE-2024-35195"],
+              "summary": "Requests `Session` object does not verify requests after making first request with verify=False",
+              "details": "When making requests through a Requests `Session`, if the first request is made with `verify=False` ...",
+              "affected": [
+                {
+                  "package": {"ecosystem": "PyPI", "name": "requests"},
+                  "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "2.32.0"}]}]
+                }
+              ],
+              "database_specific": {"severity": "MODERATE"}
+            }
+          ],
+          "groups": [
+            {"ids": ["GHSA-x84v-xcm2-53pg", "PYSEC-2018-28"], "aliases": ["CVE-2018-18074", "GHSA-x84v-xcm2-53pg", "PYSEC-2018-28"], "max_severity": "7.5"},
+            {"ids": ["GHSA-9wx4-h78v-vm56"], "aliases": ["CVE-2024-35195", "GHSA-9wx4-h78v-vm56"], "max_severity": ""}
+          ]
+        }
+      ]
+    },
+    {
+      "source": {"path": "/work/web/node_modules/left-pad/package-lock.json", "type": "lockfile"},
+      "packages": [
+        {
+          "package": {"name": "minimist", "version": "1.2.0", "ecosystem": "npm"},
+          "vulnerabilities": [{"id": "GHSA-xvch-5gv4-984h", "aliases": [], "summary": "x", "details": "x"}],
+          "groups": [{"ids": ["GHSA-xvch-5gv4-984h"], "aliases": [], "max_severity": "9.8"}]
+        }
+      ]
+    },
+    {
+      "source": {"path": "/work/go.mod", "type": "lockfile"},
+      "packages": [
+        {
+          "package": {"name": "golang.org/x/net", "version": "0.17.0", "ecosystem": "Go"},
+          "vulnerabilities": [
+            {
+              "id": "GO-2024-2687",
+              "aliases": ["CVE-2023-45288", "GHSA-4v7x-pqxf-cx7m"],
+              "summary": "HTTP/2 CONTINUATION flood in net/http",
+              "details": "An attacker may cause an HTTP/2 endpoint to read arbitrary amounts of header data ...",
+              "affected": [
+                {
+                  "package": {"ecosystem": "Go", "name": "golang.org/x/net"},
+                  "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "0.23.0"}]}]
+                }
+              ]
+            }
+          ],
+          "groups": [{"ids": ["GO-2024-2687"], "aliases": ["CVE-2023-45288", "GHSA-4v7x-pqxf-cx7m", "GO-2024-2687"], "max_severity": "5.3"}]
+        }
+      ]
+    }
+  ],
+  "experimental_config": {"licenses": {"summary": false, "allowlist": null}}
+}

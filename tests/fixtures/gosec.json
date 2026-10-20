@@ -1,0 +1,47 @@
+{
+  "Golang errors": {},
+  "Issues": [
+    {
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "cwe": {"id": "22", "url": "https://cwe.mitre.org/data/definitions/22.html"},
+      "rule_id": "G304",
+      "details": "Potential file inclusion via variable",
+      "file": "/work/cmd/fwagent/main.go",
+      "code": "41: \tdata, err := os.ReadFile(path)\n",
+      "line": "41",
+      "column": "15",
+      "nosec": false,
+      "suppressions": null,
+      "autofix": ""
+    },
+    {
+      "severity": "HIGH",
+      "confidence": "MEDIUM",
+      "cwe": {"id": "78", "url": "https://cwe.mitre.org/data/definitions/78.html"},
+      "rule_id": "G204",
+      "details": "Subprocess launched with a potential tainted input or cmd arguments",
+      "file": "/work/internal/exec/run.go",
+      "code": "18-19: ...",
+      "line": "18-19",
+      "column": "9",
+      "nosec": false,
+      "suppressions": null
+    },
+    {
+      "severity": "LOW",
+      "confidence": "HIGH",
+      "cwe": {"id": "703", "url": "https://cwe.mitre.org/data/definitions/703.html"},
+      "rule_id": "G104",
+      "details": "Errors unhandled.",
+      "file": "/work/internal/exec/run.go",
+      "code": "30: f.Close()\n",
+      "line": "30",
+      "column": "2",
+      "nosec": true,
+      "suppressions": [{"kind": "inSource", "justification": ""}]
+    }
+  ],
+  "Stats": {"files": 12, "lines": 900, "nosec": 1, "found": 3},
+  "GosecVersion": "2.21.4"
+}

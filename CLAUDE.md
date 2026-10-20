@@ -11,7 +11,10 @@ ci si ferma e si riassume.
   né la chiave né il token GitLab.
 - Loop agentico proprio sulla Messages API (non Agent SDK), tool eseguiti nel sandbox via
   docker exec. Il loop vive in `services/ripperdoc.py`, l'adapter fa un passo alla volta.
-- Git dir separata dalla working tree, hooks e fsmonitor disattivati.
+- Git dir separata dalla working tree, hooks e fsmonitor disattivati: ogni comando git passa
+  da `adapters/gitlab_vcs.Git`. Il token mai in argv, URL o log.
+- Il sandbox legge e scrive file solo da dentro il container (mai dall'host: i symlink del repo
+  potrebbero puntare ai file dell'orchestrator).
 - Verifica indipendente: test e rescan rieseguiti dall'orchestrator in un sandbox nuovo.
 - Tetti di spesa per notte e per task, prezzi letti dalla config.
 - `--dry-run` non fa push né MR e non cambia lo stato dei finding.
@@ -27,6 +30,7 @@ uv sync
 uv run pytest
 uv run ruff check src tests && uv run ruff format --check src tests
 uv run mypy src
+AUTOFIX_DOCKER_TESTS=1 uv run pytest -m docker   # solo con un daemon Docker
 ```
 
 Test prima (pytest, adapter finti in `tests/fakes.py`), poi implementazione, poi README e

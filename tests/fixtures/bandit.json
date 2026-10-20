@@ -1,0 +1,51 @@
+{
+  "errors": [],
+  "generated_at": "2026-10-20T01:00:00Z",
+  "metrics": {"_totals": {"loc": 120, "SEVERITY.HIGH": 1, "SEVERITY.LOW": 1}},
+  "results": [
+    {
+      "code": "11 \n12     subprocess.run(cmd, shell=True)\n13 \n",
+      "col_offset": 4,
+      "end_col_offset": 35,
+      "filename": "./app/runner.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {"id": 78, "link": "https://cwe.mitre.org/data/definitions/78.html"},
+      "issue_severity": "HIGH",
+      "issue_text": "subprocess call with shell=True identified, security issue.",
+      "line_number": 12,
+      "line_range": [12],
+      "more_info": "https://bandit.readthedocs.io/en/1.7.10/plugins/b602_subprocess_popen_with_shell_equals_true.html",
+      "test_id": "B602",
+      "test_name": "subprocess_popen_with_shell_equals_true"
+    },
+    {
+      "code": "1 import subprocess\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "./app/runner.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {"id": 78, "link": "https://cwe.mitre.org/data/definitions/78.html"},
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 1,
+      "line_range": [1],
+      "more_info": "https://bandit.readthedocs.io/en/1.7.10/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "5 password = 'hunter2'\n",
+      "col_offset": 0,
+      "filename": "./app/config.py",
+      "issue_confidence": "LOW",
+      "issue_cwe": {"id": 259, "link": "https://cwe.mitre.org/data/definitions/259.html"},
+      "issue_severity": "LOW",
+      "issue_text": "Possible hardcoded password: 'hunter2'",
+      "line_number": 5,
+      "line_range": [5],
+      "more_info": "https://bandit.readthedocs.io/en/1.7.10/plugins/b105_hardcoded_password_string.html",
+      "test_id": "B105",
+      "test_name": "hardcoded_password_string"
+    }
+  ]
+}

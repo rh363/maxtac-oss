@@ -24,8 +24,44 @@ class _Model(BaseModel):
 
 
 class GitLabConf(_Model):
-    url: str
+    url: str = Field(pattern=r"^https://[^/\s]+(/[^\s]*)?$")
     bot_username: str
+    bot_name: str = "Autofix Bot"
+    bot_email: str | None = None  # default: <bot_username>@noreply.<host di GitLab>
+
+    def commit_email(self) -> str:
+        host = self.url.split("://", 1)[1].split("/", 1)[0]
+        return self.bot_email or f"{self.bot_username}@noreply.{host}"
+
+
+class SandboxConf(_Model):
+    image: str = "autofix-sandbox:latest"
+    network: str = "autofix_sandbox"
+    proxy_url: str = "http://proxy:3128"
+    user: str = Field(default="1000:1000", pattern=r"^[1-9]\d*(:[1-9]\d*)?$")  # mai root
+    mem_limit: str = Field(default="4g", pattern=r"^\d+[kmg]$")
+    cpus: float = Field(default=2.0, gt=0, le=64)
+    pids_limit: int = Field(default=512, ge=64)
+    tmp_size: str = Field(default="1g", pattern=r"^\d+[kmg]$")
+    home_size: str = Field(default="4g", pattern=r"^\d+[kmg]$")
+
+
+def _default_semgrep_by_language() -> dict[str, list[str]]:
+    return {
+        "python": ["p/python"],
+        "go": ["p/golang"],
+        "javascript": ["p/javascript"],
+        "typescript": ["p/typescript"],
+    }
+
+
+class SemgrepConf(_Model):
+    rulesets: list[str] = Field(default_factory=lambda: ["p/default"])
+    by_language: dict[str, list[str]] = Field(default_factory=_default_semgrep_by_language)
+
+
+class ScannersConf(_Model):
+    semgrep: SemgrepConf = SemgrepConf()
 
 
 class ScheduleConf(_Model):
@@ -106,6 +142,8 @@ class AppConfig(_Model):
     features: FeaturesConf = FeaturesConf()
     vcs: VCSConf = VCSConf()
     ui: UIConf = UIConf()
+    sandbox: SandboxConf = SandboxConf()
+    scanners: ScannersConf = ScannersConf()
     workdir: Path = Path("/var/lib/autofix/work")
     db_path: Path = Path("/var/lib/autofix/autofix.sqlite3")
     repos: list[RepoConf] = Field(min_length=1)
@@ -127,6 +165,17 @@ class AppConfig(_Model):
         if self.budget.per_task_usd > self.budget.per_night_usd:
             raise ValueError("per_task_usd non può superare per_night_usd")
         return self
+
+    def semgrep_rulesets(self) -> list[str]:
+        """Ruleset base più quelli dei linguaggi presenti nei repo configurati.
+
+        Semgrep applica ogni regola solo ai file del suo linguaggio: i ruleset in più costano
+        tempo di download, non finding sbagliati.
+        """
+        langs = {lang for r in self.repos for lang in r.languages}
+        sg = self.scanners.semgrep
+        extra = [rs for lang in sorted(langs) for rs in sg.by_language.get(lang, [])]
+        return list(dict.fromkeys([*sg.rulesets, *extra]))
 
     def to_repos(self) -> list[RepoConfig]:
         return [
@@ -175,10 +224,18 @@ class AppConfig(_Model):
 class Secrets(BaseSettings):
     """Letti da /run/secrets/<nome> (Docker secret) o da ANTHROPIC_API_KEY e GITLAB_TOKEN."""
 
-    model_config = SettingsConfigDict(secrets_dir="/run/secrets")
+    model_config = SettingsConfigDict()  # secrets_dir passato da load_secrets()
 
     anthropic_api_key: SecretStr | None = None
     gitlab_token: SecretStr | None = None
+
+
+SECRETS_DIR = Path("/run/secrets")
+
+
+def load_secrets(secrets_dir: Path = SECRETS_DIR) -> Secrets:
+    """Senza Docker secret (sviluppo, test) valgono solo le variabili d'ambiente."""
+    return Secrets(_secrets_dir=secrets_dir if secrets_dir.is_dir() else None)  # type: ignore[call-arg]
 
 
 def load_config(path: Path) -> AppConfig:

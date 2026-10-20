@@ -44,6 +44,7 @@ from maxtac.domain.ports import (
 from .hunter import Hunter
 from .merge_request import commit_message, mr_body, mr_title
 from .ripperdoc import Ripperdoc
+from .scan import applicable, run_scanners
 from .trauma import Triage
 
 log = logging.getLogger(__name__)
@@ -141,13 +142,9 @@ class Pipeline:
     def _run_repo(self, repo: RepoConfig, night: _Night, rr: RepoReport, *, hunt: bool) -> None:
         workdir = self.settings.workdir / night.budget.run_id / repo.slug
         co = self.vcs.checkout(repo, workdir)
-        scanners = [
-            sc
-            for sc in self.scanners
-            if sc.kind in self.settings.enabled_kinds and sc.supports(repo.languages)
-        ]
+        scanners = applicable(self.scanners, self.settings.enabled_kinds, repo.languages)
         with self.sandboxes.open(co.worktree) as sb:
-            findings = self._scan(sb, scanners, rr)
+            findings = run_scanners(sb, scanners, rr.errors)
         rr.findings_total = len(findings)
         self.store.observe(findings, self.clock())
         self._reconcile_open_mrs(repo, findings)
@@ -160,16 +157,6 @@ class Pipeline:
             self._fix_tasks(co, repo, to_fix, scanners, night, rr)
         if hunt:
             self._hunt(co, repo, scanners, night, rr)
-
-    def _scan(self, sb: Sandbox, scanners: Sequence[ScannerPort], rr: RepoReport) -> list[Finding]:
-        out: list[Finding] = []
-        for sc in scanners:
-            try:
-                out.extend(sc.scan(sb))
-            except Exception as e:
-                log.exception("scanner %s fallito", sc.name)
-                rr.errors.append(f"scanner {sc.name}: {type(e).__name__}: {e}")
-        return out
 
     # --- dedup contro le MR ---
 

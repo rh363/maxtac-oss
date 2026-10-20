@@ -11,8 +11,8 @@ spesa espliciti.
 | Fase | Contenuto | Stato |
 | --- | --- | --- |
 | 0 | Dominio, porte, policy, config, store SQLite, adapter finti, CLI | fatta |
-| 1 | Immagine sandbox, `DockerSandbox`, parser degli scanner, proxy, checkout con git hardening | da fare |
-| 2 | CVE end-to-end: triage, fix agent, verifica, MR (`GitLabVCS`, `AnthropicLLM`) | da fare |
+| 1 | Immagine sandbox, `DockerSandbox`, parser degli scanner, proxy, checkout con git hardening, `GitLabVCS` | fatta |
+| 2 | CVE end-to-end: triage, fix agent, verifica, MR (`AnthropicLLM`) | da fare |
 | 3 | Finding SAST | da fare |
 | 4 | Bug hunting a rotazione sul diff recente | da fare |
 
@@ -44,7 +44,7 @@ adapter finti, senza rete.
 src/maxtac/
 ├── domain/        models, ports (Protocol), policy (regole pure), budget (prezzi e tetti)
 ├── services/      pipeline, triage, fix agent, bug hunting, testo delle MR
-├── adapters/      sqlite_store (fase 0); gitlab, docker, scanner, anthropic (fasi 1-2)
+├── adapters/      sqlite_store, gitlab_vcs, docker_sandbox, scanners; anthropic (fase 2)
 ├── presentation/  lessici e report per l'operatore
 ├── config.py      YAML + Docker secret
 ├── container.py   composition root
@@ -89,19 +89,62 @@ uv run ruff check src tests && uv run mypy src
 
 cp config.example.yaml config.yaml   # adatta workdir e db_path per l'uso locale
 uv run maxtac --config config.yaml status
+GITLAB_TOKEN=... uv run maxtac --config config.yaml run --repo alex/ecs2 --scan-only
 uv run maxtac --config config.yaml run --repo alex/ecs2 --dry-run   # dalla fase 2
 ```
+
+Il test d'integrazione con un Docker reale è skippato di default:
+`AUTOFIX_DOCKER_TESTS=1 uv run pytest -m docker`.
 
 Comandi:
 
 - `maxtac run [--repo X] [--dry-run]`: esegue subito; in dry-run niente push né MR, diff su disco;
+- `maxtac run --scan-only`: solo checkout e scan (tutti gli scanner, zero token): stampa i
+  finding normalizzati e li scrive in `workdir/<run_id>/findings.json`. Non tocca lo store;
 - `maxtac patrol`: resta in esecuzione e lancia la run all'ora configurata (`schedule`);
 - `maxtac status`: spesa del mese, finding tracciati, MR aperte.
 
-In fase 0 `run` e `patrol` escono con codice 3: gli adapter reali arrivano nelle fasi 1 e 2.
+Fino alla fase 2 `run` (senza `--scan-only`) e `patrol` escono con codice 3: manca l'adapter
+Anthropic. Senza token GitLab il codice d'uscita è 2.
 
 ## Temi di presentazione
 
 L'output per l'operatore (CLI, report a schermo, in futuro la dashboard) può usare un tema
 alternativo, scelto per utente in `ui.themes`; il default è `neutral`. Il tema cambia solo le
 parole a schermo: branch, label, commit, testo delle MR e report su disco restano sempre neutri.
+
+## Deploy
+
+Su una VM dedicata (il socket Docker montato nell'orchestrator equivale a root sull'host):
+
+```bash
+sudo mkdir -p /var/lib/autofix && sudo chown 1000:1000 /var/lib/autofix
+mkdir -p secrets && chmod 700 secrets
+printf '%s' "$ANTHROPIC_KEY" > secrets/anthropic_api_key
+printf '%s' "$GITLAB_BOT_TOKEN" > secrets/gitlab_token     # utente bot, ruolo Developer, scope api
+cp config.example.yaml config.yaml                          # repo, comandi, tetti
+export DOCKER_GID=$(stat -c %g /var/run/docker.sock)
+docker compose --profile build build sandbox-image          # immagine dei sandbox
+docker compose up -d --build                                # orchestrator + proxy
+docker compose run --rm orchestrator run --scan-only        # prova a costo zero
+```
+
+| Componente | Cosa fa |
+| --- | --- |
+| `orchestrator` | unico con segreti; parla con GitLab, Anthropic e il daemon Docker. Non root, rootfs in sola lettura |
+| `proxy` | squid con allowlist: PyPI, proxy Go, npm, OSV, registry semgrep, GitHub. Nessuna cache |
+| sandbox | creati a ogni fase dall'orchestrator sulla rete `autofix_sandbox` (`internal`): uid 1000, `cap_drop: ALL`, `no-new-privileges`, rootfs in sola lettura, limiti CPU/RAM/PID, solo la working tree montata in `/work` |
+
+L'immagine dei sandbox (Python 3.13, Go, Node LTS, osv-scanner, semgrep, bandit, gosec, versioni
+pinnate in `sandbox/Dockerfile`) va ricostruita ogni settimana: `scripts/rebuild-sandbox.sh`,
+da cron (l'esempio è nello script).
+
+### Git e checkout
+
+La git dir sta in `workdir/<run>/<repo>/gitdir`, fuori dalla working tree montata nel sandbox, e
+il file `.git` viene rimosso. Ogni comando git passa `--git-dir`/`--work-tree` espliciti, ignora
+la config globale e di sistema, disattiva hooks, fsmonitor, helper delle credenziali, submodule
+e ogni protocollo diverso da https. Il token del bot non entra mai in argv, URL o log: viaggia
+come header HTTP in variabili `GIT_CONFIG_*` limitate all'URL di GitLab, e gli errori vengono
+ripuliti. Spazzatura di setup e test (`__pycache__`, `.venv`, `node_modules`...) non finisce
+mai nelle MR.

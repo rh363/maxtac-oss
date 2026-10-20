@@ -3,6 +3,8 @@
 gitlab:
   url: https://gitlab.example.it
   bot_username: autofix-bot
+  bot_name: Autofix Bot
+  bot_email: autofix-bot@noreply.gitlab.example.it
 
 schedule:
   timezone: Europe/Rome
@@ -41,6 +43,25 @@ ui:
   default_theme: neutral
   themes:
     alex: cyberpunk
+
+# Container effimeri per scan, fix e verifica. Mai root; nessun segreto dentro.
+sandbox:
+  image: autofix-sandbox:latest
+  network: autofix_sandbox        # rete Docker internal: esce solo dal proxy
+  proxy_url: http://proxy:3128
+  user: "1000:1000"               # stesso uid dell'orchestrator
+  mem_limit: 4g
+  cpus: 2.0
+  pids_limit: 512
+
+scanners:
+  semgrep:
+    rulesets: [p/default]
+    by_language:                  # aggiunti solo per i linguaggi presenti nei repo
+      python: [p/python]
+      go: [p/golang]
+      javascript: [p/javascript]
+      typescript: [p/typescript]
 
 workdir: /var/lib/autofix/work
 db_path: /var/lib/autofix/autofix.sqlite3

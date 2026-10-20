@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable, Sequence
 from typing import Any
 
-from maxtac.domain.models import RunReport
+from maxtac.domain.models import FindingRecord, RunReport
+from maxtac.domain.policy import group_into_tasks
+from maxtac.services.scan import ScanResult
 
 from .lexicon import Lexicon
 
@@ -68,3 +72,54 @@ def render_status(
     for mr in by_mr.values():
         lines.append(f"  - {mr['kind']} {mr['rule']} {mr['location']}: {mr['mr_url'] or '-'}")
     return "\n".join(lines)
+
+
+Lookup = Callable[[str], FindingRecord | None]
+
+
+def render_scan(results: Sequence[ScanResult], lx: Lexicon, lookup: Lookup) -> str:
+    """Finding normalizzati di `run --scan-only`, raggruppati come li vedrebbe il fix agent."""
+    lines = [f"# {lx.product}: scan", ""]
+    for res in results:
+        tasks = group_into_tasks(res.findings)
+        lines += [
+            f"## {res.repo.project}",
+            "",
+            f"- {lx.findings}: {len(res.findings)}, task: {len(tasks)}",
+        ]
+        for f in sorted(res.findings, key=lambda f: (-f.severity, f.kind, f.rule, f.location)):
+            rec = lookup(f.fingerprint)
+            state = rec.status.value if rec else "new"
+            where = f"{f.location}:{f.line}" if f.line else f.location
+            lines.append(
+                f"- [{f.severity.name}] {f.kind}/{f.tool} {f.rule} @ {where} "
+                f"({state}, {f.fingerprint})"
+            )
+        for err in res.errors:
+            lines.append(f"- errore: {err[:300]}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def scan_json(results: Sequence[ScanResult], lookup: Lookup) -> str:
+    """Versione macchina dello scan: sempre neutra, finisce su disco."""
+    data = []
+    for res in results:
+        findings = []
+        for f in res.findings:
+            rec = lookup(f.fingerprint)
+            findings.append(
+                {
+                    "fingerprint": f.fingerprint,
+                    "kind": f.kind,
+                    "tool": f.tool,
+                    "rule": f.rule,
+                    "location": f.location,
+                    "line": f.line,
+                    "severity": f.severity.name.lower(),
+                    "status": rec.status.value if rec else "new",
+                    "detail": f.detail,
+                }
+            )
+        data.append({"project": res.repo.project, "findings": findings, "errors": res.errors})
+    return json.dumps({"repos": data}, indent=2, ensure_ascii=False)

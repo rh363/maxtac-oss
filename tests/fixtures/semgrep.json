@@ -1,0 +1,50 @@
+{
+  "version": "1.95.0",
+  "results": [
+    {
+      "check_id": "python.lang.security.audit.subprocess-shell-true.subprocess-shell-true",
+      "path": "app/runner.py",
+      "start": {"line": 12, "col": 5, "offset": 230},
+      "end": {"line": 12, "col": 48, "offset": 273},
+      "extra": {
+        "message": "Found 'subprocess' function 'run' with 'shell=True'. This is dangerous because this call will spawn the command using a shell process.",
+        "metadata": {
+          "cwe": ["CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"],
+          "owasp": ["A01:2017 - Injection", "A03:2021 - Injection"],
+          "confidence": "MEDIUM",
+          "likelihood": "HIGH",
+          "impact": "LOW",
+          "source": "https://semgrep.dev/r/python.lang.security.audit.subprocess-shell-true.subprocess-shell-true"
+        },
+        "severity": "ERROR",
+        "fingerprint": "requires login",
+        "lines": "requires login",
+        "validation_state": "NO_VALIDATOR",
+        "engine_kind": "OSS"
+      }
+    },
+    {
+      "check_id": "go.lang.security.audit.crypto.math_random.math-random-used",
+      "path": "./internal/token/token.go",
+      "start": {"line": 7, "col": 2, "offset": 40},
+      "end": {"line": 7, "col": 15, "offset": 53},
+      "extra": {
+        "message": "Do not use `math/rand`. Use `crypto/rand` instead.",
+        "metadata": {"cwe": ["CWE-338"], "confidence": "MEDIUM"},
+        "severity": "WARNING",
+        "lines": "requires login",
+        "engine_kind": "OSS"
+      }
+    },
+    {
+      "check_id": "javascript.lang.security.audit.eval",
+      "path": "node_modules/lib/index.js",
+      "start": {"line": 1, "col": 1},
+      "end": {"line": 1, "col": 2},
+      "extra": {"message": "eval", "metadata": {}, "severity": "ERROR"}
+    }
+  ],
+  "errors": [],
+  "paths": {"scanned": ["app/runner.py", "internal/token/token.go"]},
+  "skipped_rules": []
+}

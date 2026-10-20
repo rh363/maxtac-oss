@@ -1,0 +1,56 @@
+# Autofix su una VM dedicata. I sandbox non stanno qui: li crea l'orchestrator a ogni task,
+# sulla rete `autofix_sandbox`, con HTTPS_PROXY=http://proxy:3128.
+services:
+  orchestrator:
+    build: .
+    image: autofix-orchestrator:latest
+    restart: unless-stopped
+    command: ["patrol"]
+    user: "1000:1000"
+    group_add: ["${DOCKER_GID:?gid del socket docker: stat -c %g /var/run/docker.sock}"]
+    secrets: [anthropic_api_key, gitlab_token]
+    environment:
+      AUTOFIX_CONFIG: /etc/autofix/config.yaml
+      TZ: Europe/Rome
+    volumes:
+      - ./config.yaml:/etc/autofix/config.yaml:ro
+      - /var/lib/autofix:/var/lib/autofix   # stesso path su host e container: i bind mount dei sandbox funzionano
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [egress]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "maxtac", "status"]
+      interval: 5m
+      timeout: 30s
+      retries: 3
+    depends_on: [proxy]
+
+  proxy:
+    image: ubuntu/squid:6.6-24.04_beta
+    restart: unless-stopped
+    volumes: [./proxy/squid.conf:/etc/squid/squid.conf:ro]
+    networks: [egress, sandbox]
+    healthcheck:
+      test: ["CMD", "squid", "-k", "check"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+
+  # Solo per costruire l'immagine dei sandbox: `docker compose build sandbox-image`.
+  sandbox-image:
+    build: ./sandbox
+    image: autofix-sandbox:latest
+    profiles: [build]
+
+networks:
+  egress: {}
+  sandbox:
+    name: autofix_sandbox
+    internal: true   # nessuna rotta verso l'esterno: si esce solo dal proxy
+
+secrets:
+  anthropic_api_key: {file: ./secrets/anthropic_api_key}
+  gitlab_token: {file: ./secrets/gitlab_token}

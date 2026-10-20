@@ -78,3 +78,19 @@ def test_secrets_from_dir(tmp_path):
     assert s.anthropic_api_key is not None and s.anthropic_api_key.get_secret_value() == "sk-test"
     assert s.gitlab_token is None
     assert "sk-test" not in repr(s)
+
+
+def test_phase1_sections_defaults_and_validation(tmp_path):
+    cfg = load_config(EXAMPLE)
+    assert cfg.gitlab.commit_email() == "autofix-bot@noreply.gitlab.example.it"
+    assert cfg.sandbox.user == "1000:1000" and cfg.sandbox.network == "autofix_sandbox"
+    assert cfg.semgrep_rulesets() == ["p/default", "p/golang", "p/python"]
+    for bad in ({"user": "0:0"}, {"user": "root"}, {"mem_limit": "lots"}):
+        data = raw()
+        data["sandbox"] = bad
+        with pytest.raises(ValidationError):
+            load_config(write(tmp_path, data))
+    data = raw()
+    data["gitlab"]["url"] = "http://gitlab.example.it"
+    with pytest.raises(ValidationError):
+        load_config(write(tmp_path, data))
