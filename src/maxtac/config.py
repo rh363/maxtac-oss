@@ -137,6 +137,47 @@ class UIConf(_Model):
         return self.default_theme
 
 
+class OIDCConf(_Model):
+    """Login della dashboard: Authorization Code + PKCE verso GitLab, Keycloak o altro IdP."""
+
+    issuer: str = Field(pattern=r"^https://[^/\s]+(/[^\s]*)?$")
+    client_id: str = Field(min_length=1)
+    redirect_uri: str = Field(pattern=r"^https://[^/\s]+/[^\s]*$")
+    scopes: list[str] = Field(default_factory=lambda: ["openid", "profile"])
+    # GitLab mette lo username in `nickname` (e in `preferred_username` nelle versioni recenti)
+    username_claims: list[str] = Field(
+        default_factory=lambda: ["preferred_username", "nickname"], min_length=1
+    )
+    timeout_s: float = Field(default=10.0, gt=0)
+
+    @field_validator("scopes")
+    @classmethod
+    def _openid_scope(cls, v: list[str]) -> list[str]:
+        if "openid" not in v:
+            raise ValueError("gli scope OIDC devono includere openid")
+        return v
+
+
+class WebConf(_Model):
+    allowed_users: list[str] = Field(min_length=1)
+    oidc: OIDCConf | None = None
+    host: str = "0.0.0.0"  # dentro il container; sull'host la porta va pubblicata su 127.0.0.1
+    port: int = Field(default=8080, ge=1, le=65535)
+    session_max_age_s: int = Field(default=8 * 3600, ge=300, le=7 * 24 * 3600)
+    # Solo sviluppo: utente fisso senza login, accettato solo con `maxtac web --dev` su loopback
+    dev_user: str | None = None
+    login_rate_limit: int = Field(default=10, ge=1)  # tentativi per finestra, per client
+    login_rate_window_s: int = Field(default=300, ge=10)
+    # IP o reti del reverse proxy di cui fidarsi per X-Forwarded-For (vuoto: header ignorati)
+    trusted_proxies: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.dev_user is not None and self.dev_user not in self.allowed_users:
+            raise ValueError("web.dev_user deve stare in web.allowed_users")
+        return self
+
+
 class PriceConf(_Model):
     input: float = Field(ge=0)
     output: float = Field(ge=0)
@@ -170,6 +211,7 @@ class AppConfig(_Model):
     vcs: VCSConf = VCSConf()
     ui: UIConf = UIConf()
     notify: NotifyConf = NotifyConf()
+    web: WebConf | None = None
     sandbox: SandboxConf = SandboxConf()
     scanners: ScannersConf = ScannersConf()
     workdir: Path = Path("/var/lib/autofix/work")
@@ -251,13 +293,16 @@ class AppConfig(_Model):
 
 class Secrets(BaseSettings):
     """Letti da /run/secrets/<nome> (Docker secret) o dalle variabili d'ambiente omonime
-    (ANTHROPIC_API_KEY, GITLAB_TOKEN, NOTIFY_WEBHOOK_URL)."""
+    (ANTHROPIC_API_KEY, GITLAB_TOKEN, NOTIFY_WEBHOOK_URL, OIDC_CLIENT_SECRET,
+    WEB_SESSION_SECRET)."""
 
     model_config = SettingsConfigDict()  # secrets_dir passato da load_secrets()
 
     anthropic_api_key: SecretStr | None = None
     gitlab_token: SecretStr | None = None
     notify_webhook_url: SecretStr | None = None
+    oidc_client_secret: SecretStr | None = None
+    web_session_secret: SecretStr | None = None
 
 
 SECRETS_DIR = Path("/run/secrets")

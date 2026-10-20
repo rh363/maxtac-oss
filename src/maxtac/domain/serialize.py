@@ -42,6 +42,8 @@ def _fix(fx: FixResult) -> dict[str, Any]:
         "branch": fx.branch,
         "mr_url": fx.mr_url,
         "diff": truncate(fx.diff, DIFF_LIMIT),
+        "test_output": truncate(fx.test_output, DETAIL_LIMIT * 2),
+        "triage_reason": truncate(fx.triage_reason, DETAIL_LIMIT),
     }
 
 

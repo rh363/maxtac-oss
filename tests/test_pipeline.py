@@ -125,6 +125,7 @@ def test_cve_fixed_verified_and_mr_opened(world):
     [fx] = report.repos[0].fixes
     assert fx.outcome is Outcome.MR_OPENED, fx.detail
     assert fx.mr_url and fx.mr_url.endswith("/merge_requests/1")
+    assert "raggiungibile" in fx.triage_reason and fx.test_output  # per la dashboard
     [mr] = w.gl.mrs
     task = group_into_tasks(cve_findings())[0]
     assert mr["branch"] == branch_name(task) == fx.branch

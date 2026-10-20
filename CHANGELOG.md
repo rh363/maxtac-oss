@@ -54,8 +54,22 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 - Simulazione di una settimana di notti: tetti di spesa, MR per notte, rotazione, nessuna MR
   doppia.
 
+- Fase 5a: API della dashboard in sola lettura (`maxtac web`, FastAPI, extra `web`): `me`,
+  `dashboard`, `findings` con filtri e paginazione, `runs`, dettaglio run e task. Contratto
+  OpenAPI in `web/openapi.json` verificato da un test.
+- Login OIDC (Authorization Code + PKCE, state e nonce, validazione dell'id_token con JWKS in
+  cache), sessione in cookie firmato, allowlist utenti, rate limit sul login, modalità dev
+  solo su loopback.
+- Temi per utente nella dashboard: il pacchetto di un tema alternativo è servito solo a chi ce
+  l'ha assegnato; per tutti gli altri è indistinguibile da un tema inesistente.
+- Servizio `web` nel compose: senza socket Docker né segreti del bot, db in sola lettura,
+  porta solo su loopback dietro reverse proxy.
+- Il report di ogni fix conserva motivo del triage e output dei test della verifica.
+
 ### Changed
 
+- Il db SQLite usa il journal `DELETE` invece di WAL, così la dashboard può leggerlo da un
+  mount in sola lettura.
 - Lo store dei finding è per repo (chiave progetto + fingerprint): prima la stessa CVE in due
   repo condivideva lo stato, e un finding ignorato in un repo veniva soppresso anche negli altri.
 - La spesa dei task è registrata con scope `fix:<repo>:<task>`, distinto tra repo.

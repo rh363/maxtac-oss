@@ -1,0 +1,1238 @@
+{
+  "components": {
+    "schemas": {
+      "DashboardOut": {
+        "properties": {
+          "findings_by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Findings By Status",
+            "type": "object"
+          },
+          "hunting": {
+            "items": {
+              "$ref": "#/components/schemas/HuntingSlotOut"
+            },
+            "title": "Hunting",
+            "type": "array"
+          },
+          "hunting_enabled": {
+            "title": "Hunting Enabled",
+            "type": "boolean"
+          },
+          "month": {
+            "$ref": "#/components/schemas/MonthSpendOut"
+          },
+          "night": {
+            "$ref": "#/components/schemas/NightSpendOut"
+          },
+          "open_mrs": {
+            "items": {
+              "$ref": "#/components/schemas/OpenMR"
+            },
+            "title": "Open Mrs",
+            "type": "array"
+          },
+          "recent_runs": {
+            "items": {
+              "$ref": "#/components/schemas/RunSummaryOut"
+            },
+            "title": "Recent Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "month",
+          "night",
+          "open_mrs",
+          "findings_by_status",
+          "hunting_enabled",
+          "hunting",
+          "recent_runs"
+        ],
+        "title": "DashboardOut",
+        "type": "object"
+      },
+      "FindingOut": {
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "first_seen": {
+            "format": "date-time",
+            "title": "First Seen",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "mr_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mr Url"
+          },
+          "project": {
+            "title": "Project",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "rule": {
+            "title": "Rule",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "new",
+              "ignored",
+              "needs_human",
+              "mr_open"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project",
+          "fingerprint",
+          "kind",
+          "tool",
+          "rule",
+          "location",
+          "severity",
+          "status",
+          "attempts",
+          "reason",
+          "mr_url",
+          "first_seen",
+          "last_seen"
+        ],
+        "title": "FindingOut",
+        "type": "object"
+      },
+      "FindingPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FindingOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "FindingPage",
+        "type": "object"
+      },
+      "FixOut": {
+        "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "detail": {
+            "description": "Testo semplice: va mostrato escaped",
+            "title": "Detail",
+            "type": "string"
+          },
+          "diff": {
+            "default": "",
+            "description": "Diff unificato, testo semplice",
+            "title": "Diff",
+            "type": "string"
+          },
+          "mr_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mr Url"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/TaskOut"
+          },
+          "test_output": {
+            "default": "",
+            "title": "Test Output",
+            "type": "string"
+          },
+          "triage_reason": {
+            "default": "",
+            "title": "Triage Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "outcome",
+          "cost_usd",
+          "detail"
+        ],
+        "title": "FixOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HuntingSlotOut": {
+        "properties": {
+          "hunt_count": {
+            "title": "Hunt Count",
+            "type": "integer"
+          },
+          "last_hunted": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Hunted"
+          },
+          "next_up": {
+            "title": "Next Up",
+            "type": "boolean"
+          },
+          "project": {
+            "title": "Project",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project",
+          "last_hunted",
+          "hunt_count",
+          "next_up"
+        ],
+        "title": "HuntingSlotOut",
+        "type": "object"
+      },
+      "Me": {
+        "properties": {
+          "theme": {
+            "title": "Theme",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "theme"
+        ],
+        "title": "Me",
+        "type": "object"
+      },
+      "MonthSpendOut": {
+        "properties": {
+          "credits_usd": {
+            "title": "Credits Usd",
+            "type": "number"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "projected_usd": {
+            "title": "Projected Usd",
+            "type": "number"
+          },
+          "spent_usd": {
+            "title": "Spent Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "spent_usd",
+          "credits_usd",
+          "projected_usd"
+        ],
+        "title": "MonthSpendOut",
+        "type": "object"
+      },
+      "NightSpendOut": {
+        "properties": {
+          "cap_usd": {
+            "title": "Cap Usd",
+            "type": "number"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "spent_usd": {
+            "title": "Spent Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "run_id",
+          "spent_usd",
+          "cap_usd"
+        ],
+        "title": "NightSpendOut",
+        "type": "object"
+      },
+      "OpenMR": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "mr_url": {
+            "title": "Mr Url",
+            "type": "string"
+          },
+          "project": {
+            "title": "Project",
+            "type": "string"
+          },
+          "rule": {
+            "title": "Rule",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project",
+          "kind",
+          "rule",
+          "location",
+          "mr_url"
+        ],
+        "title": "OpenMR",
+        "type": "object"
+      },
+      "RepoRunOut": {
+        "properties": {
+          "bugs_found": {
+            "title": "Bugs Found",
+            "type": "integer"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "findings_new": {
+            "title": "Findings New",
+            "type": "integer"
+          },
+          "findings_total": {
+            "title": "Findings Total",
+            "type": "integer"
+          },
+          "fixes": {
+            "items": {
+              "$ref": "#/components/schemas/FixOut"
+            },
+            "title": "Fixes",
+            "type": "array"
+          },
+          "hunted": {
+            "title": "Hunted",
+            "type": "boolean"
+          },
+          "ignored": {
+            "items": {
+              "$ref": "#/components/schemas/TriagedOut"
+            },
+            "title": "Ignored",
+            "type": "array"
+          },
+          "needs_human": {
+            "items": {
+              "$ref": "#/components/schemas/TriagedOut"
+            },
+            "title": "Needs Human",
+            "type": "array"
+          },
+          "project": {
+            "title": "Project",
+            "type": "string"
+          },
+          "skipped_open_mr": {
+            "title": "Skipped Open Mr",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project",
+          "findings_total",
+          "findings_new",
+          "skipped_open_mr",
+          "hunted",
+          "bugs_found",
+          "fixes",
+          "ignored",
+          "needs_human",
+          "errors"
+        ],
+        "title": "RepoRunOut",
+        "type": "object"
+      },
+      "RunDetail": {
+        "properties": {
+          "aborted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aborted"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "mrs_opened": {
+            "title": "Mrs Opened",
+            "type": "integer"
+          },
+          "night_cap_usd": {
+            "title": "Night Cap Usd",
+            "type": "number"
+          },
+          "repos": {
+            "items": {
+              "$ref": "#/components/schemas/RepoRunOut"
+            },
+            "title": "Repos",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "spent_usd": {
+            "title": "Spent Usd",
+            "type": "number"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "run_id",
+          "dry_run",
+          "spent_usd",
+          "night_cap_usd",
+          "mrs_opened",
+          "repos"
+        ],
+        "title": "RunDetail",
+        "type": "object"
+      },
+      "RunList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "offset"
+        ],
+        "title": "RunList",
+        "type": "object"
+      },
+      "RunSummaryOut": {
+        "properties": {
+          "aborted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aborted"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "mrs_opened": {
+            "title": "Mrs Opened",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "spent_usd": {
+            "title": "Spent Usd",
+            "type": "number"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "run_id",
+          "started_at",
+          "finished_at",
+          "dry_run",
+          "spent_usd",
+          "mrs_opened",
+          "aborted"
+        ],
+        "title": "RunSummaryOut",
+        "type": "object"
+      },
+      "TaskDetail": {
+        "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "cost_usd": {
+            "default": 0.0,
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "diff": {
+            "default": "",
+            "title": "Diff",
+            "type": "string"
+          },
+          "mr_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mr Url"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "project": {
+            "title": "Project",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/TaskOut"
+          },
+          "test_output": {
+            "default": "",
+            "title": "Test Output",
+            "type": "string"
+          },
+          "triage_reason": {
+            "default": "",
+            "title": "Triage Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "project",
+          "task",
+          "outcome"
+        ],
+        "title": "TaskDetail",
+        "type": "object"
+      },
+      "TaskFinding": {
+        "properties": {
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "rule": {
+            "title": "Rule",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "kind",
+          "tool",
+          "rule",
+          "location",
+          "severity"
+        ],
+        "title": "TaskFinding",
+        "type": "object"
+      },
+      "TaskOut": {
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/TaskFinding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "kind",
+          "title",
+          "severity",
+          "findings"
+        ],
+        "title": "TaskOut",
+        "type": "object"
+      },
+      "TriagedOut": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/TaskOut"
+          }
+        },
+        "required": [
+          "task",
+          "reason"
+        ],
+        "title": "TriagedOut",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Autofix dashboard API",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/dashboard": {
+      "get": {
+        "operationId": "dashboard_api_dashboard_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Dashboard"
+      }
+    },
+    "/api/findings": {
+      "get": {
+        "operationId": "findings_api_findings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "cve",
+                    "sast",
+                    "bug"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "info",
+                    "low",
+                    "medium",
+                    "high",
+                    "critical"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "new",
+                    "ignored",
+                    "needs_human",
+                    "mr_open"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "repo",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repo"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Findings"
+      }
+    },
+    "/api/me": {
+      "get": {
+        "operationId": "me_api_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me"
+      }
+    },
+    "/api/runs": {
+      "get": {
+        "operationId": "runs_api_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runs"
+      }
+    },
+    "/api/runs/{run_id}": {
+      "get": {
+        "operationId": "run_api_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run"
+      }
+    },
+    "/api/runs/{run_id}/tasks/{fingerprint}": {
+      "get": {
+        "operationId": "task_api_runs__run_id__tasks__fingerprint__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "fingerprint",
+            "required": true,
+            "schema": {
+              "title": "Fingerprint",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "repo",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repo"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Task"
+      }
+    },
+    "/api/theme/{theme}/lexicon.json": {
+      "get": {
+        "operationId": "theme_lexicon_api_theme__theme__lexicon_json_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "theme",
+            "required": true,
+            "schema": {
+              "title": "Theme",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Theme Lexicon Api Theme  Theme  Lexicon Json Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Theme Lexicon"
+      }
+    }
+  }
+}

@@ -9,7 +9,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from maxtac.domain.models import Finding, FindingRecord, FindingStatus, RunReport, RunSummary
+from maxtac.domain.models import (
+    Finding,
+    FindingQuery,
+    FindingRecord,
+    FindingRow,
+    FindingStatus,
+    RunReport,
+    RunSummary,
+    Severity,
+)
 from maxtac.domain.serialize import report_to_dict
 
 SCHEMA = """
@@ -65,12 +74,29 @@ def _iso(dt: datetime) -> str:
 
 
 def connect(path: str | Path) -> sqlite3.Connection:
+    """Connessione dell'orchestrator: crea lo schema.
+
+    Journal in modalità DELETE e non WAL: la dashboard apre lo stesso file da un mount in sola
+    lettura, e un lettore WAL deve poter scrivere il file -shm. Con una scrittura per task il
+    WAL non porta vantaggi misurabili.
+    """
     if str(path) != ":memory:":
         Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), isolation_level=None)  # autocommit
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA journal_mode=DELETE")
     conn.executescript(SCHEMA)
+    return conn
+
+
+def connect_readonly(path: str | Path) -> sqlite3.Connection:
+    """Connessione della dashboard: sola lettura, nessuna creazione di file o schema."""
+    uri = f"{Path(path).resolve().as_uri()}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True, isolation_level=None, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA query_only=ON")
     return conn
 
 
@@ -175,6 +201,45 @@ class SqliteStore:
         )
         return [dict(r) for r in rows]
 
+    def list_findings(self, q: FindingQuery) -> tuple[list[FindingRow], int]:
+        where, params = [], []
+        for col, val in (
+            ("project", q.project),
+            ("kind", q.kind),
+            ("severity", q.severity.name if q.severity is not None else None),
+            ("status", q.status.value if q.status is not None else None),
+        ):
+            if val is not None:
+                where.append(f"{col} = ?")
+                params.append(val)
+        clause = f"WHERE {' AND '.join(where)}" if where else ""
+        total = self._db.execute(f"SELECT COUNT(*) AS n FROM findings {clause}", params).fetchone()
+        rank = " ".join(f"WHEN '{s.name}' THEN {int(s)}" for s in Severity)
+        rows = self._db.execute(
+            f"""SELECT * FROM findings {clause}
+                ORDER BY CASE severity {rank} ELSE -1 END DESC, last_seen DESC, fingerprint
+                LIMIT ? OFFSET ?""",
+            [*params, q.limit, q.offset],
+        )
+        return [
+            FindingRow(
+                project=r["project"],
+                fingerprint=r["fingerprint"],
+                kind=r["kind"],
+                tool=r["tool"],
+                rule=r["rule"],
+                location=r["location"],
+                severity=Severity.parse(r["severity"]),
+                status=FindingStatus(r["status"]),
+                attempts=r["attempts"],
+                reason=r["reason"],
+                mr_url=r["mr_url"],
+                first_seen=datetime.fromisoformat(r["first_seen"]),
+                last_seen=datetime.fromisoformat(r["last_seen"]),
+            )
+            for r in rows
+        ], int(total["n"])
+
 
 class SqliteBudget:
     def __init__(self, conn: sqlite3.Connection) -> None:
@@ -239,11 +304,11 @@ class SqliteRunStore:
             ),
         )
 
-    def recent_runs(self, limit: int) -> list[RunSummary]:
+    def recent_runs(self, limit: int, offset: int = 0) -> list[RunSummary]:
         rows = self._db.execute(
             """SELECT run_id, started_at, finished_at, dry_run, spent_usd, mrs_opened, aborted
-               FROM runs ORDER BY COALESCE(started_at, '') DESC, run_id DESC LIMIT ?""",
-            (limit,),
+               FROM runs ORDER BY COALESCE(started_at, '') DESC, run_id DESC LIMIT ? OFFSET ?""",
+            (limit, offset),
         )
         return [
             RunSummary(

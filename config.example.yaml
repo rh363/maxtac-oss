@@ -63,6 +63,21 @@ ui:
   themes:
     alex: cyberpunk
 
+# Dashboard web (`maxtac web`, servizio `web` del compose). Login OIDC con PKCE: per GitLab
+# crea un'Application (Admin o del gruppo) con scope openid e profile, confidential, redirect
+# URI qui sotto. Segreti: /run/secrets/oidc_client_secret e /run/secrets/web_session_secret.
+web:
+  allowed_users: [alex]           # username GitLab; tutti gli altri ricevono 403
+  oidc:
+    issuer: https://gitlab.example.it
+    client_id: "<application id>"
+    redirect_uri: https://autofix.example.it/auth/callback
+    scopes: [openid, profile]
+    username_claims: [preferred_username, nickname]
+  session_max_age_s: 28800
+  trusted_proxies: []             # es. ["172.16.0.0/12"] se il reverse proxy passa X-Forwarded-For
+  # dev_user: alex                # solo `maxtac web --dev`, bind su loopback
+
 # Container effimeri per scan, fix e verifica. Mai root; nessun segreto dentro.
 sandbox:
   image: autofix-sandbox:latest

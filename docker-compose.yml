@@ -39,6 +39,33 @@ services:
       timeout: 10s
       retries: 3
 
+  # Dashboard in sola lettura (profilo `web`). Niente socket Docker, niente segreti del bot né
+  # chiave Anthropic: db montato read-only, solo il client OIDC e la chiave delle sessioni.
+  # La porta è pubblicata solo su loopback: davanti serve un reverse proxy con TLS.
+  web:
+    image: autofix-orchestrator:latest
+    restart: unless-stopped
+    command: ["web"]
+    profiles: [web]
+    user: "1000:1000"
+    secrets: [oidc_client_secret, web_session_secret]
+    environment:
+      AUTOFIX_CONFIG: /etc/autofix/config.yaml
+    volumes:
+      - ./config.yaml:/etc/autofix/config.yaml:ro
+      - /var/lib/autofix:/var/lib/autofix:ro
+    ports: ["127.0.0.1:8080:8080"]
+    networks: [web]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5)"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+
   # Solo per costruire l'immagine dei sandbox: `docker compose build sandbox-image`.
   sandbox-image:
     build: ./sandbox
@@ -47,6 +74,7 @@ services:
 
 networks:
   egress: {}
+  web: {}            # esce solo verso l'IdP (discovery, token, JWKS)
   sandbox:
     name: autofix_sandbox
     internal: true   # nessuna rotta verso l'esterno: si esce solo dal proxy
@@ -54,3 +82,5 @@ networks:
 secrets:
   anthropic_api_key: {file: ./secrets/anthropic_api_key}
   gitlab_token: {file: ./secrets/gitlab_token}
+  oidc_client_secret: {file: ./secrets/oidc_client_secret}
+  web_session_secret: {file: ./secrets/web_session_secret}

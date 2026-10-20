@@ -15,6 +15,8 @@ spesa espliciti.
 | 2 | CVE end-to-end: triage, fix agent, verifica, MR (`AnthropicLLM`) | fatta |
 | 3 | Finding SAST: fix, falsi positivi ignorati, nessun finding nuovo introdotto | fatta |
 | 4 | Bug hunting a rotazione, test di regressione che fallisce sul base, storico run, notifica | fatta |
+| 5a | API della dashboard in sola lettura, login OIDC, temi per utente | fatta |
+| 5b | SPA della dashboard (SvelteKit), dopo la validazione dei mockup | da fare |
 
 Tutte le fasi sono verificate in locale (git reale, bandit reale, GitLab e modello finti). Cosa
 resta da verificare solo sulla VM vera è in [Go-live](#go-live).
@@ -162,9 +164,68 @@ finestra successiva, ricostruendo la pipeline a ogni notte.
 
 ## Temi di presentazione
 
-L'output per l'operatore (CLI, report a schermo, in futuro la dashboard) può usare un tema
-alternativo, scelto per utente in `ui.themes`; il default è `neutral`. Il tema cambia solo le
-parole a schermo: branch, label, commit, testo delle MR e report su disco restano sempre neutri.
+L'output per l'operatore (CLI, report a schermo, dashboard) può usare un tema alternativo,
+scelto per utente in `ui.themes`; il default è `neutral`. Il tema cambia solo le parole a
+schermo: branch, label, commit, testo delle MR e report su disco restano sempre neutri.
+
+Nella dashboard chi non ha un tema assegnato riceve `theme: "default"` e il bundle base contiene
+solo il tema di default: gli asset di un tema alternativo li serve l'API, e solo a chi ce l'ha
+assegnato (per gli altri rispondono 404, come un tema inesistente).
+
+## Dashboard
+
+`maxtac web` (servizio `web` del compose, profilo `web`) espone un'API in sola lettura per la
+dashboard; la SPA arriverà dopo la validazione dei mockup. Il contratto è
+[`web/openapi.json`](web/openapi.json): un test fallisce se il codice diverge
+(rigenera con `maxtac web --export-openapi web/openapi.json`).
+
+| Endpoint | Contenuto |
+| --- | --- |
+| `GET /api/me` | utente e tema risolto |
+| `GET /api/dashboard` | spesa del mese vs crediti e proiezione, ultima notte vs tetto, MR aperte, finding per stato, rotazione del bug hunting, ultime run |
+| `GET /api/findings` | filtri `kind`, `severity`, `status`, `repo`; `limit` (max 200) e `offset` |
+| `GET /api/runs`, `GET /api/runs/{id}` | storico e report completo di una notte |
+| `GET /api/runs/{id}/tasks/{fingerprint}` | finding, motivo del triage, diff, output dei test, costo, link alla MR (`?repo=` se serve) |
+| `GET /api/theme/{name}/lexicon.json`, `.../theme.css` | pacchetto del tema, solo per chi ce l'ha assegnato |
+| `/auth/login`, `/auth/callback`, `POST /auth/logout` | login OIDC |
+
+**Login.** OIDC Authorization Code + PKCE lato server, con `state` e `nonce`, id_token
+validato su firma (JWKS in cache, ricaricata su `kid` sconosciuto al massimo una volta al
+minuto), `iss`, `aud`/`azp`, `exp`. Sessione in cookie firmato `HttpOnly`, `Secure`,
+`SameSite=Lax`. Accesso solo agli utenti di `web.allowed_users`, ricontrollato a ogni
+richiesta. Rate limit sul login per client.
+
+Su GitLab: *Admin → Applications* (o le Applications di un gruppo), confidential, scope
+`openid` e `profile`, redirect URI `https://<host della dashboard>/auth/callback`. L'Application
+ID va in `web.oidc.client_id`, il secret in `secrets/oidc_client_secret`; la chiave delle
+sessioni è una stringa casuale di almeno 32 caratteri:
+
+```bash
+printf '%s' "$GITLAB_APP_SECRET" > secrets/oidc_client_secret
+python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")' > secrets/web_session_secret
+docker compose --profile web up -d web
+```
+
+**Isolamento.** Il container `web` non ha il socket Docker né i segreti del bot e della chiave
+Anthropic; monta `/var/lib/autofix` in sola lettura e apre il db con `mode=ro` e
+`query_only`. Per questo il db usa il journal `DELETE` e non WAL (un lettore WAL deve scrivere
+il file `-shm`). La porta è pubblicata solo su `127.0.0.1:8080`: davanti va un reverse proxy
+con TLS (Caddy, nginx), per esempio con Caddy:
+
+```
+autofix.example.it {
+    reverse_proxy 127.0.0.1:8080
+}
+```
+
+Se il proxy passa `X-Forwarded-For`, elenca il suo indirizzo o la sua rete in
+`web.trusted_proxies`, altrimenti il rate limit vede un solo client. Header di sicurezza
+sempre attivi: CSP stretta (`'self'`, niente inline), `X-Frame-Options: DENY`, `nosniff`,
+`Referrer-Policy: no-referrer`, `Cache-Control: no-store` sull'API. Niente `/docs` né
+`/openapi.json` pubblici. Path dell'host e link che non puntano a GitLab vengono tolti dalle
+risposte; diff e output dei test sono testo semplice, da mostrare escaped.
+
+Per sviluppare: `web.dev_user` in config e `maxtac web --dev` (solo su loopback, nessun login).
 
 ## Deploy
 

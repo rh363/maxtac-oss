@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import calendar
 import getpass
+import json
 import logging
 import os
 import sys
@@ -12,7 +13,7 @@ import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from maxtac.config import DEFAULT_CONFIG_PATH, AppConfig, load_config
+from maxtac.config import DEFAULT_CONFIG_PATH, AppConfig, load_config, load_secrets
 from maxtac.container import Container, MissingSecret
 from maxtac.domain.models import RepoConfig, RunReport
 from maxtac.domain.policy import next_run_at
@@ -45,6 +46,16 @@ def _parser() -> argparse.ArgumentParser:
 
     sub.add_parser("patrol", help="resta in esecuzione e lancia la run all'ora configurata")
     sub.add_parser("status", help="spesa del mese, finding e MR aperte")
+
+    web = sub.add_parser("web", help="dashboard web in sola lettura")
+    web.add_argument("--host", help="indirizzo di bind (default: web.host)")
+    web.add_argument("--port", type=int, help="porta (default: web.port)")
+    web.add_argument(
+        "--dev",
+        action="store_true",
+        help="solo sviluppo: utente web.dev_user senza login, bind consentito solo su loopback",
+    )
+    web.add_argument("--export-openapi", type=Path, metavar="PATH", help="scrive lo schema ed esce")
     return p
 
 
@@ -158,6 +169,51 @@ def cmd_status(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
 
 COMMANDS = {"run": cmd_run, "patrol": cmd_patrol, "status": cmd_status}
 
+LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+
+
+def export_openapi(path: Path) -> None:
+    from maxtac.web.app import openapi_document
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(openapi_document(), indent=2, ensure_ascii=False, sort_keys=True)
+    path.write_text(text + "\n", encoding="utf-8")
+
+
+def cmd_web(cfg: AppConfig, args: argparse.Namespace) -> int:
+    """Non passa dal Container: il servizio web apre il db in sola lettura e non ha i segreti
+    del bot."""
+    try:
+        import uvicorn
+
+        from maxtac.web.app import WebConfigError, create_app
+    except ImportError:
+        print("dipendenze web mancanti: installa l'extra `web`", file=sys.stderr)
+        return 2
+    if cfg.web is None:
+        print("sezione `web` mancante in config", file=sys.stderr)
+        return 2
+    host = args.host or ("127.0.0.1" if args.dev else cfg.web.host)
+    if args.dev and host not in LOOPBACK:
+        print("--dev è ammesso solo con bind su loopback", file=sys.stderr)
+        return 2
+    try:
+        app = create_app(cfg, load_secrets(), dev=args.dev)
+    except WebConfigError as e:
+        print(f"web: {e}", file=sys.stderr)
+        return 2
+    proxies = cfg.web.trusted_proxies
+    uvicorn.run(
+        app,
+        host=host,
+        port=args.port or cfg.web.port,
+        proxy_headers=bool(proxies),
+        forwarded_allow_ips=",".join(proxies) if proxies else None,
+        server_header=False,
+        access_log=True,
+    )
+    return 0
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
@@ -165,11 +221,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    if args.command == "web" and args.export_openapi:
+        export_openapi(args.export_openapi)  # non serve la config
+        return 0
     try:
         cfg = load_config(args.config)
     except FileNotFoundError:
         print(f"config non trovata: {args.config}", file=sys.stderr)
         return 2
+    if args.command == "web":
+        return cmd_web(cfg, args)
     lx = _lexicon(cfg, args)
     c = Container.build(cfg)
     try:

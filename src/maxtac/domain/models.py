@@ -126,6 +126,35 @@ class FindingRecord:
 
 
 @dataclass(frozen=True)
+class FindingRow:
+    """Riga di lettura per la dashboard: finding con il suo stato corrente."""
+
+    project: str
+    fingerprint: str
+    kind: str
+    tool: str
+    rule: str
+    location: str
+    severity: Severity
+    status: FindingStatus
+    attempts: int
+    reason: str
+    mr_url: str | None
+    first_seen: datetime
+    last_seen: datetime
+
+
+@dataclass(frozen=True)
+class FindingQuery:
+    project: str | None = None
+    kind: str | None = None
+    severity: Severity | None = None
+    status: FindingStatus | None = None
+    limit: int = 50
+    offset: int = 0
+
+
+@dataclass(frozen=True)
 class RepoConfig:
     """Config di fiducia del repo: viene dal file dell'orchestrator, mai dal repo."""
 
@@ -251,6 +280,8 @@ class FixResult:
     branch: str | None = None
     mr_url: str | None = None
     diff: str = ""
+    test_output: str = ""  # output dei test della verifica indipendente
+    triage_reason: str = ""
 
 
 @dataclass

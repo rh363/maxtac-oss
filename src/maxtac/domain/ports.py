@@ -14,7 +14,9 @@ from .models import (
     ExecResult,
     FileChange,
     Finding,
+    FindingQuery,
     FindingRecord,
+    FindingRow,
     FindingStatus,
     Message,
     RepoConfig,
@@ -143,6 +145,10 @@ class FindingStore(Protocol):
 
     def open_mrs(self) -> list[dict[str, Any]]: ...
 
+    def list_findings(self, q: FindingQuery) -> tuple[list[FindingRow], int]:
+        """Pagina di finding (severità decrescente, più recenti prima) e totale filtrato."""
+        ...
+
 
 class BudgetPort(Protocol):
     def record(self, run_id: str, scope: str, model: str, usd: float, at: datetime) -> None: ...
@@ -157,7 +163,7 @@ class RunStore(Protocol):
 
     def save_run(self, report: RunReport) -> None: ...
 
-    def recent_runs(self, limit: int) -> list[RunSummary]: ...
+    def recent_runs(self, limit: int, offset: int = 0) -> list[RunSummary]: ...
 
     def get_run(self, run_id: str) -> dict[str, Any] | None: ...
 

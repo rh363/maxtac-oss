@@ -1,0 +1,55 @@
+/* Tema alternativo dell'operatore. Servito solo agli utenti a cui è assegnato in ui.themes:
+   il bundle base della SPA contiene soltanto il tema di default. I font vanno messi accanto a
+   questo file (woff2) e vengono serviti dallo stesso endpoint protetto. */
+:root[data-theme="cyberpunk"] {
+  --color-bg: #0a0a0f;
+  --color-surface: #12121a;
+  --color-surface-2: #1a1a26;
+  --color-border: #2a2a3a;
+  --color-text: #e8e6d9;
+  --color-text-muted: #8a8a9a;
+  --color-primary: #fcee0a;
+  --color-primary-contrast: #0a0a0f;
+  --color-accent: #00f0ff;
+  --color-danger: #ff2a6d;
+  --color-warning: #fcee0a;
+  --color-success: #05ffa1;
+  --color-info: #00f0ff;
+  --radius: 0;
+  --cut: 10px; /* angoli tagliati via clip-path */
+  --font-display: "Rajdhani", "Orbitron", system-ui, sans-serif;
+  --font-body: "Rajdhani", system-ui, sans-serif;
+  --font-mono: "Share Tech Mono", ui-monospace, monospace;
+}
+
+:root[data-theme="cyberpunk"] body {
+  background:
+    repeating-linear-gradient(0deg, rgb(255 255 255 / 0.02) 0 1px, transparent 1px 3px),
+    var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+:root[data-theme="cyberpunk"] .card,
+:root[data-theme="cyberpunk"] .btn {
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%,
+                     var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+
+:root[data-theme="cyberpunk"] .logo {
+  font-family: var(--font-display);
+  letter-spacing: 0.12em;
+  text-shadow: 2px 0 var(--color-danger), -2px 0 var(--color-accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-theme="cyberpunk"] .logo:hover {
+    animation: glitch 0.3s steps(2) 2;
+  }
+}
+
+@keyframes glitch {
+  0% { transform: translate(0); }
+  50% { transform: translate(-2px, 1px); }
+  100% { transform: translate(1px, -1px); }
+}

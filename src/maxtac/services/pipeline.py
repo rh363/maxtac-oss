@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import shlex
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -278,6 +278,9 @@ class Pipeline:
                 rr.fixes.append(FixResult(task, Outcome.BUDGET_EXHAUSTED, 0.0, "tetto della notte"))
                 break
             result = self._fix_one(co, repo, task, scanners, baseline, night)
+            verdict = night.verdicts.get(task.fingerprint)
+            if verdict is not None:
+                result = replace(result, triage_reason=verdict.reason)
             if result.outcome in (Outcome.MR_OPENED, Outcome.DRY_RUN):
                 night.mrs += 1
             rr.fixes.append(result)
@@ -333,7 +336,13 @@ class Pipeline:
             diff = self.vcs.diff(co)
             if self.settings.dry_run:
                 return FixResult(
-                    task, Outcome.DRY_RUN, meter.spent, agent.summary, branch, diff=diff
+                    task,
+                    Outcome.DRY_RUN,
+                    meter.spent,
+                    agent.summary,
+                    branch,
+                    diff=diff,
+                    test_output=verify_log,
                 )
             self.vcs.push_branch(co, branch, commit_message(task))
             body = mr_body(
@@ -344,7 +353,16 @@ class Pipeline:
                 self._set_status(
                     repo, f, FindingStatus.MR_OPEN, "MR aperta", mr_url=url, branch=branch
                 )
-            return FixResult(task, Outcome.MR_OPENED, meter.spent, agent.summary, branch, url, diff)
+            return FixResult(
+                task,
+                Outcome.MR_OPENED,
+                meter.spent,
+                agent.summary,
+                branch,
+                url,
+                diff,
+                test_output=verify_log,
+            )
         except BudgetExceeded:
             return self._budget_stop(repo, task, meter, branch)
         except SetupFailed as e:

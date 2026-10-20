@@ -21,7 +21,12 @@ ci si ferma e si riassume.
 - Il contenuto dei repo è input non fidato; la config di fiducia sta solo nel file
   dell'orchestrator.
 - **Tutto ciò che va su GitLab (branch, label, commit, testo MR) e i report su disco sono sempre
-  neutri.** Il tema cyberpunk esiste solo in `presentation/` e si sceglie per utente.
+  neutri.** Il tema cyberpunk esiste solo in `presentation/` (e negli asset in
+  `web/themes/`) e si sceglie per utente.
+- Dashboard (`src/maxtac/web/`): sola lettura, db aperto con `connect_readonly`, nessun
+  segreto del bot. Un utente senza tema assegnato non deve poter scoprire il tema alternativo:
+  `theme: "default"`, asset 404 come per un tema inesistente, bundle base solo neutro.
+- Dopo una modifica all'API: `uv run maxtac web --export-openapi web/openapi.json`.
 
 ## Comandi
 
