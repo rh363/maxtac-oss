@@ -1,0 +1,309 @@
+@import 'tailwindcss';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+
+/*
+ * Token del tema di default. Un tema alternativo (caricato a runtime solo per chi lo ha
+ * assegnato) ridefinisce queste variabili: qui non c'è nessun riferimento ad altri temi.
+ */
+:root {
+	--bg: #fafafa;
+	--side: #ffffff;
+	--surface: #ffffff;
+	--surface-alt: #f5f5f5;
+	--field: #ffffff;
+	--border: #e5e5e5;
+	--text: #171717;
+	--muted: #525252;
+	--link: #171717;
+	--h1: #171717;
+	--primary: #171717;
+	--on-primary: #ffffff;
+	--ok: #15803d;
+	--track: #f5f5f5;
+	--nav-idle: #404040;
+	--logo: #171717;
+
+	--font: 'Inter', system-ui, sans-serif;
+	--font-head: 'Inter', system-ui, sans-serif;
+	--font-num: 'Inter', system-ui, sans-serif;
+	--font-logo: 'Inter', system-ui, sans-serif;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+	--logo-weight: 600;
+	--logo-size: 17px;
+	--logo-track: normal;
+	--logo-shadow: none;
+	--h1-size: 24px;
+	--num-weight: 400;
+	--case: none;
+	--tracking: normal;
+	--nav-size: 14px;
+	--radius: 2px;
+	--avatar-radius: 50%;
+	--clip: none;
+	--clip-logo: none;
+	--btn-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 0.15), 0 1px 2px rgb(0 0 0 / 0.2), 0 2px 4px rgb(0 0 0 / 0.1);
+
+	/* toni: testo, sfondo, bordo */
+	--crit-fg: #991b1b;
+	--crit-bg: #fef2f2;
+	--crit-bd: #fca5a5;
+	--high-fg: #9a3412;
+	--high-bg: #fff7ed;
+	--high-bd: #fdba74;
+	--med-fg: #854d0e;
+	--med-bg: #fefce8;
+	--med-bd: #fde047;
+	--low-fg: #1e40af;
+	--low-bg: #eff6ff;
+	--low-bd: #bfdbfe;
+	--good-fg: #166534;
+	--good-bg: #f0fdf4;
+	--good-bd: #86efac;
+	--bad-fg: #991b1b;
+	--bad-bg: #fef2f2;
+	--bad-bd: #fca5a5;
+	--warn-fg: #92400e;
+	--warn-bg: #fffbeb;
+	--warn-bd: #fcd34d;
+	--idle-fg: #525252;
+	--idle-bg: #f5f5f5;
+	--idle-bd: #e5e5e5;
+	--info-fg: #1e40af;
+	--info-bg: #eff6ff;
+	--info-bd: #bfdbfe;
+
+	/* barre: stato dei finding e KPI */
+	--bar-new: #1d4ed8;
+	--bar-mr_open: #171717;
+	--bar-needs_human: #b45309;
+	--bar-ignored: #a3a3a3;
+	--kpi-1: var(--primary);
+	--kpi-2: var(--primary);
+	--kpi-3: var(--primary);
+	--kpi-4: var(--warn-fg);
+	--kpi-top-1: var(--border);
+	--kpi-top-2: var(--border);
+	--kpi-top-3: var(--border);
+	--kpi-top-4: var(--border);
+}
+
+@theme inline {
+	--color-bg: var(--bg);
+	--color-side: var(--side);
+	--color-surface: var(--surface);
+	--color-surface-alt: var(--surface-alt);
+	--color-field: var(--field);
+	--color-line: var(--border);
+	--color-ink: var(--text);
+	--color-muted: var(--muted);
+	--color-link: var(--link);
+	--color-primary: var(--primary);
+	--color-on-primary: var(--on-primary);
+	--color-ok: var(--ok);
+	--color-track: var(--track);
+	--font-sans: var(--font);
+	--font-mono: var(--font-mono);
+}
+
+html,
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font);
+	font-size: 14px;
+}
+
+@layer components {
+	.card {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		clip-path: var(--clip);
+	}
+	.h-display {
+		font-family: var(--font-head);
+		text-transform: var(--case);
+		letter-spacing: var(--tracking);
+		font-weight: 600;
+	}
+	.h1 {
+		font-size: var(--h1-size);
+		color: var(--h1);
+	}
+	.tag {
+		font-family: var(--font);
+		font-size: 12px;
+		font-weight: 400;
+		text-transform: none;
+		letter-spacing: normal;
+		color: var(--muted);
+	}
+	.num {
+		font-family: var(--font-num);
+		font-weight: var(--num-weight);
+	}
+	.mono {
+		font-family: var(--font-mono);
+	}
+	.logo {
+		font-family: var(--font-logo);
+		font-weight: var(--logo-weight);
+		font-size: var(--logo-size);
+		letter-spacing: var(--logo-track);
+		color: var(--logo);
+		text-shadow: var(--logo-shadow);
+	}
+	.logo-mark {
+		background: var(--primary);
+		clip-path: var(--clip-logo);
+		border-radius: var(--radius);
+	}
+	.avatar {
+		background: var(--primary);
+		color: var(--on-primary);
+		border-radius: var(--avatar-radius);
+		clip-path: var(--clip-logo);
+	}
+	.btn-primary {
+		background: var(--primary);
+		color: var(--on-primary);
+		border-radius: var(--radius);
+		clip-path: var(--clip);
+		box-shadow: var(--btn-shadow);
+		font-family: var(--font-head);
+		text-transform: var(--case);
+		letter-spacing: var(--tracking);
+		font-weight: 600;
+	}
+	.nav-item {
+		font-family: var(--font-head);
+		font-size: var(--nav-size);
+		text-transform: var(--case);
+		letter-spacing: var(--tracking);
+		color: var(--nav-idle);
+		border-radius: var(--radius);
+	}
+	.nav-item[aria-current='page'] {
+		background: var(--primary);
+		color: var(--on-primary);
+	}
+	.nav-item:not([aria-current='page']):hover {
+		background: var(--surface-alt);
+	}
+	.link {
+		color: var(--link);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+	.field {
+		min-height: 44px;
+		color: var(--text);
+		background: var(--field);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+	}
+	.bar {
+		height: 6px;
+		background: var(--track);
+		border-radius: var(--radius);
+		overflow: hidden;
+	}
+	.bar > span {
+		display: block;
+		height: 100%;
+	}
+	.th {
+		text-align: left;
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--muted);
+		letter-spacing: var(--tracking);
+	}
+	.badge {
+		display: inline-block;
+		padding: 2px 8px;
+		font-size: 12px;
+		font-weight: 600;
+		border: 1px solid;
+		border-radius: var(--radius);
+		white-space: nowrap;
+	}
+	.tone-crit {
+		color: var(--crit-fg);
+		background: var(--crit-bg);
+		border-color: var(--crit-bd);
+	}
+	.tone-high {
+		color: var(--high-fg);
+		background: var(--high-bg);
+		border-color: var(--high-bd);
+	}
+	.tone-med {
+		color: var(--med-fg);
+		background: var(--med-bg);
+		border-color: var(--med-bd);
+	}
+	.tone-low {
+		color: var(--low-fg);
+		background: var(--low-bg);
+		border-color: var(--low-bd);
+	}
+	.tone-good {
+		color: var(--good-fg);
+		background: var(--good-bg);
+		border-color: var(--good-bd);
+	}
+	.tone-bad {
+		color: var(--bad-fg);
+		background: var(--bad-bg);
+		border-color: var(--bad-bd);
+	}
+	.tone-warn {
+		color: var(--warn-fg);
+		background: var(--warn-bg);
+		border-color: var(--warn-bd);
+	}
+	.tone-idle {
+		color: var(--idle-fg);
+		background: var(--idle-bg);
+		border-color: var(--idle-bd);
+	}
+	.tone-info {
+		color: var(--info-fg);
+		background: var(--info-bg);
+		border-color: var(--info-bd);
+	}
+	.diff-add {
+		color: var(--good-fg);
+		background: var(--good-bg);
+	}
+	.diff-del {
+		color: var(--bad-fg);
+		background: var(--bad-bg);
+	}
+	.diff-hunk {
+		color: var(--idle-fg);
+	}
+}
+
+:focus-visible {
+	outline: 2px solid var(--link);
+	outline-offset: 2px;
+}
+
+/* L'annuncio delle navigazioni di SvelteKit ha uno stile inline che la CSP blocca: lo stesso
+   stile qui, così resta visivamente nascosto. */
+#svelte-announcer {
+	position: absolute;
+	left: 0;
+	top: 0;
+	clip-path: inset(50%);
+	overflow: hidden;
+	white-space: nowrap;
+	width: 1px;
+	height: 1px;
+}

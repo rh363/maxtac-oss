@@ -45,6 +45,7 @@ from .schemas import (
     TaskDetail,
 )
 from .security import RateLimiter, SecurityHeaders
+from .spa import default_static_dir, mount_spa
 
 log = logging.getLogger(__name__)
 
@@ -142,6 +143,9 @@ def create_app(
     )
     app.add_middleware(SecurityHeaders)
     _routes(app)
+    static_dir = web.static_dir or default_static_dir()
+    if not mount_spa(app, static_dir):
+        log.warning("build della dashboard non trovata in %s: servo solo l'API", static_dir)
     return app
 
 
@@ -182,6 +186,9 @@ def service(request: Request) -> Iterator[DashboardService]:
             hunting_per_night=cfg.hunting.repos_per_night,
             scrub=Scrubber([str(cfg.workdir), str(cfg.db_path.parent)], cfg.gitlab.url),
             clock=st.clock,
+            max_mrs_per_night=cfg.budget.max_mrs_per_night,
+            schedule_at=cfg.schedule.at,
+            schedule_tz=cfg.schedule.timezone,
         )
     finally:
         conn.close()

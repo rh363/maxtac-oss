@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from maxtac.domain.models import FindingQuery, FindingRow, FindingStatus, RepoConfig, RunSummary
-from maxtac.domain.policy import pick_hunting_repos
+from maxtac.domain.policy import next_run_at, pick_hunting_repos
 from maxtac.domain.ports import BudgetPort, FindingStore, RunStore
 
 
@@ -45,6 +45,10 @@ class Dashboard:
     hunting: list[HuntingSlot]
     hunting_enabled: bool
     recent_runs: list[RunSummary]
+    repos: list[str]
+    max_mrs_per_night: int
+    hunting_per_night: int
+    next_run_at: datetime | None
 
 
 class Scrubber:
@@ -84,6 +88,9 @@ class DashboardService:
     hunting_per_night: int
     scrub: Scrubber
     clock: Callable[[], datetime]
+    max_mrs_per_night: int = 3
+    schedule_at: str | None = None  # HH:MM, ora locale di `schedule_tz`
+    schedule_tz: str = "Europe/Rome"
 
     def dashboard(self, recent: int = 10) -> Dashboard:
         now = self.clock()
@@ -142,6 +149,12 @@ class DashboardService:
             hunting=hunting,
             hunting_enabled=self.hunting_enabled,
             recent_runs=runs,
+            repos=[r.project for r in self.repos],
+            max_mrs_per_night=self.max_mrs_per_night,
+            hunting_per_night=self.hunting_per_night,
+            next_run_at=(
+                next_run_at(now, self.schedule_at, self.schedule_tz) if self.schedule_at else None
+            ),
         )
 
     def findings(self, q: FindingQuery) -> tuple[list[FindingRow], int]:

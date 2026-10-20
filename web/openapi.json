@@ -21,8 +21,28 @@
             "title": "Hunting Enabled",
             "type": "boolean"
           },
+          "hunting_per_night": {
+            "title": "Hunting Per Night",
+            "type": "integer"
+          },
+          "max_mrs_per_night": {
+            "title": "Max Mrs Per Night",
+            "type": "integer"
+          },
           "month": {
             "$ref": "#/components/schemas/MonthSpendOut"
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
           },
           "night": {
             "$ref": "#/components/schemas/NightSpendOut"
@@ -40,6 +60,13 @@
             },
             "title": "Recent Runs",
             "type": "array"
+          },
+          "repos": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Repos",
+            "type": "array"
           }
         },
         "required": [
@@ -49,7 +76,11 @@
           "findings_by_status",
           "hunting_enabled",
           "hunting",
-          "recent_runs"
+          "recent_runs",
+          "repos",
+          "max_mrs_per_night",
+          "hunting_per_night",
+          "next_run_at"
         ],
         "title": "DashboardOut",
         "type": "object"

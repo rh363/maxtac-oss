@@ -170,6 +170,8 @@ class WebConf(_Model):
     login_rate_window_s: int = Field(default=300, ge=10)
     # IP o reti del reverse proxy di cui fidarsi per X-Forwarded-For (vuoto: header ignorati)
     trusted_proxies: list[str] = Field(default_factory=list)
+    # Build della SPA (frontend/build). Vuoto: quella accanto al sorgente, se esiste
+    static_dir: Path | None = None
 
     @model_validator(mode="after")
     def _check(self) -> Self:

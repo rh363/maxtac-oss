@@ -1,5 +1,7 @@
 import base64
+import hashlib
 import json
+import re
 import sqlite3
 import time
 from datetime import UTC, datetime
@@ -350,7 +352,7 @@ def test_assigned_user_gets_theme_pack(cfg, idp):
     c = make_client(cfg, idp)
     login(c, idp)
     lx = c.get("/api/theme/cyberpunk/lexicon.json")
-    assert lx.status_code == 200 and lx.json()["product"] == "MAXTAC"
+    assert lx.status_code == 200 and lx.json()["product"] == "MaxTac"
     css = c.get("/api/theme/cyberpunk/theme.css")
     assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
 
@@ -463,8 +465,10 @@ def test_security_headers(cfg, idp):
 
 def test_no_public_docs(cfg, idp):
     c = _alex(cfg, idp)
-    for path in ("/docs", "/redoc", "/openapi.json"):
-        assert c.get(path).status_code == 404
+    assert c.get("/openapi.json").status_code == 404
+    for path in ("/docs", "/redoc"):  # con la build presente sono rotte della SPA
+        r = c.get(path)
+        assert r.status_code == 404 or not re.search("swagger|redoc", r.text, re.I)
 
 
 # --- config, avvio e contratto ---
@@ -525,3 +529,67 @@ def test_openapi_has_no_theme_words():
 def test_pkce_challenge_rfc7636_vector():
     verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
     assert pkce_challenge(verifier) == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+
+
+# --- SPA e lessico della dashboard ---
+
+NEUTRAL_UI = Path(__file__).parent.parent / "frontend" / "src" / "lib" / "lexicon" / "neutral.json"
+
+
+def test_theme_ui_overrides_only_existing_labels():
+    from maxtac.presentation.lexicon import CYBERPUNK
+
+    neutral = json.loads(NEUTRAL_UI.read_text(encoding="utf-8"))
+    assert set(CYBERPUNK.ui) <= set(neutral)
+    assert not THEMED.search(json.dumps(neutral, ensure_ascii=False))
+
+
+def _spa_build(root: Path) -> Path:
+    build = root / "build"
+    (build / "_app" / "immutable" / "entry").mkdir(parents=True)
+    (build / "index.html").write_text(
+        "<!doctype html><html><body><div><script>boot()</script></div></body></html>"
+    )
+    (build / "_app" / "immutable" / "entry" / "app.abc.js").write_text(
+        'const t = `<div style="position: absolute"></div>`;'
+    )
+    (build / "favicon.svg").write_text("<svg/>")
+    (root / "secret.txt").write_text("fuori dalla build")
+    return build
+
+
+def test_spa_routes_assets_and_csp(tmp_path):
+    build = _spa_build(tmp_path)
+    cfg = config(tmp_path, dev_user="alex", oidc=None)
+    cfg = cfg.model_copy(update={"web": cfg.web.model_copy(update={"static_dir": build})})
+    seed(cfg)
+    c = TestClient(create_app(cfg, Secrets(), dev=True), base_url="https://testserver")
+
+    for path in ("/", "/findings", "/runs/20261020T013000Z/tasks/abc"):
+        r = c.get(path)
+        assert r.status_code == 200 and "boot()" in r.text
+        assert r.headers["cache-control"] == "no-cache"
+        csp = r.headers["content-security-policy"]
+        boot = base64.b64encode(hashlib.sha256(b"boot()").digest()).decode()
+        style = base64.b64encode(hashlib.sha256(b"position: absolute").digest()).decode()
+        assert f"script-src 'self' 'sha256-{boot}'" in csp
+        assert f"style-src-attr 'unsafe-hashes' 'sha256-{style}'" in csp
+        assert "unsafe-inline" not in csp
+
+    asset = c.get("/_app/immutable/entry/app.abc.js")
+    assert asset.status_code == 200 and "immutable" in asset.headers["cache-control"]
+    assert c.get("/favicon.svg").headers["cache-control"] == "no-cache"
+    assert c.get("/_app/immutable/nope.js").status_code == 404
+    assert c.get("/..%2Fsecret.txt").status_code == 404
+    assert c.get("/api/nope").status_code == 404 and c.get("/api/nope").json()
+    assert c.get("/api/me").json()["username"] == "alex"
+    # le risposte dell'API mantengono la CSP stretta, senza hash
+    assert "sha256" not in c.get("/api/me").headers["content-security-policy"]
+
+
+def test_dashboard_exposes_schedule_and_repos(cfg, idp):
+    c = make_client(cfg, idp)
+    login(c, idp)
+    d = c.get("/api/dashboard").json()
+    assert d["repos"] and d["max_mrs_per_night"] == cfg.budget.max_mrs_per_night
+    assert d["next_run_at"] is not None and d["hunting_per_night"] >= 0

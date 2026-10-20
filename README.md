@@ -16,7 +16,7 @@ spesa espliciti.
 | 3 | Finding SAST: fix, falsi positivi ignorati, nessun finding nuovo introdotto | fatta |
 | 4 | Bug hunting a rotazione, test di regressione che fallisce sul base, storico run, notifica | fatta |
 | 5a | API della dashboard in sola lettura, login OIDC, temi per utente | fatta |
-| 5b | SPA della dashboard (SvelteKit), dopo la validazione dei mockup | da fare |
+| 5b | SPA della dashboard (SvelteKit) dai mockup approvati, tema per utente caricato a runtime | fatta |
 
 Tutte le fasi sono verificate in locale (git reale, bandit reale, GitLab e modello finti). Cosa
 resta da verificare solo sulla VM vera è in [Go-live](#go-live).
@@ -198,12 +198,16 @@ schermo: branch, label, commit, testo delle MR e report su disco restano sempre 
 
 Nella dashboard chi non ha un tema assegnato riceve `theme: "default"` e il bundle base contiene
 solo il tema di default: gli asset di un tema alternativo li serve l'API, e solo a chi ce l'ha
-assegnato (per gli altri rispondono 404, come un tema inesistente).
+assegnato (per gli altri rispondono 404, come un tema inesistente). Il tema alternativo è
+attenuato: le etichette funzionali (finding, run, esiti) restano quelle chiare del tema di
+default, il tema cambia colori e font e aggiunge solo marchio, sottotitoli secondari e qualche
+dettaglio. `npm run build` fallisce se nel bundle compare uno dei termini di
+[`web/theme-terms.json`](web/theme-terms.json).
 
 ## Dashboard
 
-`maxtac web` (servizio `web` del compose, profilo `web`) espone un'API in sola lettura per la
-dashboard; la SPA arriverà dopo la validazione dei mockup. Il contratto è
+`maxtac web` (servizio `web` del compose, profilo `web`) serve la SPA della dashboard
+(`frontend/`, SvelteKit) e un'API in sola lettura sullo stesso origin. Il contratto è
 [`web/openapi.json`](web/openapi.json): un test fallisce se il codice diverge
 (rigenera con `maxtac web --export-openapi web/openapi.json`).
 
@@ -248,12 +252,62 @@ autofix.example.it {
 
 Se il proxy passa `X-Forwarded-For`, elenca il suo indirizzo o la sua rete in
 `web.trusted_proxies`, altrimenti il rate limit vede un solo client. Header di sicurezza
-sempre attivi: CSP stretta (`'self'`, niente inline), `X-Frame-Options: DENY`, `nosniff`,
+sempre attivi: CSP stretta (`'self'`, niente `'unsafe-inline'`), `X-Frame-Options: DENY`, `nosniff`,
 `Referrer-Policy: no-referrer`, `Cache-Control: no-store` sull'API. Niente `/docs` né
 `/openapi.json` pubblici. Path dell'host e link che non puntano a GitLab vengono tolti dalle
 risposte; diff e output dei test sono testo semplice, da mostrare escaped.
 
 Per sviluppare: `web.dev_user` in config e `maxtac web --dev` (solo su loopback, nessun login).
+
+### Frontend (`frontend/`)
+
+SvelteKit in modalità SPA (`adapter-static`, `ssr = false`), Svelte 5, TypeScript strict,
+Tailwind, icone `@lucide/svelte`, risposte dell'API validate con Zod (gli schemi in
+`src/lib/api/schemas.ts` sono confrontati con `web/openapi.json` da un test). Le pagine stanno
+in `src/lib/svelte/page/<feature>/`, le rotte in `src/routes/` sono solo entry point.
+
+| Schermata | Rotta |
+| --- | --- |
+| Dashboard: spesa del mese e della notte, MR, finding per stato, rotazione del bug hunting, ultime run | `/` |
+| Finding con filtri tipo, severità, stato e repo nell'URL, paginazione | `/findings` |
+| Storico delle run | `/runs` |
+| Dettaglio run: statistiche, timeline per repo (scan, triage, fix, verifica, MR), task con esito e costo | `/runs/{id}` |
+| Dettaglio task: finding, motivo del triage, cosa cambia, verifica, diff, output dei test, costo, link alla MR | `/runs/{id}/tasks/{fp}?repo=` |
+
+Etichette e temi: le etichette neutre stanno in `src/lib/lexicon/neutral.json`; dopo
+`/api/me`, se l'utente ha un tema, la SPA carica `/api/theme/<nome>/theme.css` e
+`lexicon.json` (le cui chiavi `ui` sovrascrivono solo etichette esistenti). Il tema si aggancia
+con `data-theme` su `<html>` e ridefinisce le variabili CSS; i suoi font sono serviti dallo stesso
+endpoint protetto.
+
+Sviluppo, con il backend su `:8080` e il proxy di Vite per `/api` e `/auth`:
+
+```bash
+uv run python scripts/seed-demo-db.py --out /tmp/autofix-demo --user alex   # o --user boss
+uv run maxtac --config /tmp/autofix-demo/config.yaml web --dev --port 8080
+cd frontend && npm ci && npm run dev
+```
+
+Controlli:
+
+```bash
+npm run build      # build + controllo che il bundle non contenga il tema alternativo
+npm run check      # svelte-check
+npm run lint       # prettier + eslint
+npm test           # vitest: client API e contratto, lessico, filtri, formattazione
+npm run test:e2e   # Playwright su due istanze demo (utente con tema e senza), richiede la build
+SCREENSHOTS=1 npm run test:e2e -- screenshots   # rigenera docs/screenshots/
+```
+
+Screenshot dei due temi in [`docs/screenshots/`](docs/screenshots/) (per esempio
+`neutral-dashboard-desktop.png` e `operator-dashboard-desktop.png`).
+
+**Serving e CSP.** FastAPI serve la build (`web.static_dir`, default `frontend/build` accanto
+al sorgente): asset in `_app/immutable/` con cache immutabile, `index.html` senza cache e come
+fallback per le rotte della SPA, 404 per un asset mancante. Lo script di avvio inline di
+SvelteKit è autorizzato con il suo hash, gli attributi `style` statici dei template con
+`'unsafe-hashes'` e i loro hash: niente `'unsafe-inline'`. L'immagine `Dockerfile.web` costruisce
+la SPA con Node e poi copia solo la build nell'immagine Python.
 
 ## Deploy
 

@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -14,11 +15,8 @@ from maxtac.services.merge_request import commit_message, mr_body, mr_title
 from .fakes import requests_cve
 
 EXAMPLE = Path(__file__).parent.parent / "config.example.yaml"
-THEMED = re.compile(
-    r"maxtac|cyberps|ripperdoc|trauma|night city|eddies|€\$|blackwall|braindance|ncpd|"
-    r"netrunner|patrol|flatline|fixer umano|bounty",
-    re.I,
-)
+TERMS = json.loads((Path(__file__).parent.parent / "web" / "theme-terms.json").read_text())
+THEMED = re.compile("|".join(TERMS["themed"]), re.I)
 TASK = group_into_tasks(requests_cve({"requirements.txt": "requests==2.19.0"}))[0]
 
 
@@ -47,7 +45,8 @@ def test_neutral_report_has_no_theme_words():
 
 def test_cyberpunk_report_is_themed():
     out = render_run(report(), CYBERPUNK)
-    assert "MAXTAC" in out and "€$0.42" in out and "patrol" in out
+    # tema attenuato: marchio a tema, etichette e importi leggibili come nel neutro
+    assert "# MaxTac:" in out and "$0.42" in out
 
 
 def test_lexicons_cover_every_outcome():
@@ -68,7 +67,7 @@ def config(tmp_path):
 
 def test_status_theme_per_user(config, capsys):
     assert cli.main(["--config", str(config), "--as", "alex", "status"]) == 0
-    assert "MAXTAC" in capsys.readouterr().out
+    assert "MaxTac" in capsys.readouterr().out
     assert cli.main(["--config", str(config), "--as", "capo", "status"]) == 0
     out = capsys.readouterr().out
     assert "Autofix" in out and not THEMED.search(out)

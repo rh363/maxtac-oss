@@ -1,55 +1,157 @@
-/* Tema alternativo dell'operatore. Servito solo agli utenti a cui è assegnato in ui.themes:
-   il bundle base della SPA contiene soltanto il tema di default. I font vanno messi accanto a
-   questo file (woff2) e vengono serviti dallo stesso endpoint protetto. */
+/* Tema alternativo dell'operatore, versione attenuata approvata.
+   Servito solo agli utenti a cui è assegnato in ui.themes: il bundle base della SPA contiene
+   soltanto il tema di default. Leggibilità prima di tutto: corpo e dati in Inter (già nel
+   bundle), Rajdhani solo per titoli, menu e numeri, Orbitron solo per il logo, niente scanline
+   né glitch sopra i dati. Contrasto AA: il giallo è solo accento su fondo scuro, o sfondo con
+   testo nero. I font sono serviti dallo stesso endpoint protetto. */
+
+@font-face {
+  font-family: "Rajdhani";
+  font-weight: 500;
+  font-display: swap;
+  src: url("rajdhani-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-weight: 600;
+  font-display: swap;
+  src: url("rajdhani-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-weight: 700;
+  font-display: swap;
+  src: url("rajdhani-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Orbitron";
+  font-weight: 700;
+  font-display: swap;
+  src: url("orbitron-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Orbitron";
+  font-weight: 900;
+  font-display: swap;
+  src: url("orbitron-900.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-weight: 400;
+  font-display: swap;
+  src: url("ibm-plex-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-weight: 500;
+  font-display: swap;
+  src: url("ibm-plex-mono-500.woff2") format("woff2");
+}
+
 :root[data-theme="cyberpunk"] {
-  --color-bg: #0a0a0f;
-  --color-surface: #12121a;
-  --color-surface-2: #1a1a26;
-  --color-border: #2a2a3a;
-  --color-text: #e8e6d9;
-  --color-text-muted: #8a8a9a;
-  --color-primary: #fcee0a;
-  --color-primary-contrast: #0a0a0f;
-  --color-accent: #00f0ff;
-  --color-danger: #ff2a6d;
-  --color-warning: #fcee0a;
-  --color-success: #05ffa1;
-  --color-info: #00f0ff;
-  --radius: 0;
-  --cut: 10px; /* angoli tagliati via clip-path */
-  --font-display: "Rajdhani", "Orbitron", system-ui, sans-serif;
-  --font-body: "Rajdhani", system-ui, sans-serif;
-  --font-mono: "Share Tech Mono", ui-monospace, monospace;
+  color-scheme: dark;
+
+  --bg: #0a0a0e;
+  --side: #0d0d12;
+  --surface: #121219;
+  --surface-alt: #181822;
+  --field: #0d0d12;
+  --border: #2e2e3a;
+  --text: #ecebe4;
+  --muted: #ababb8;
+  --link: #5cf3ff;
+  --h1: #fcee0a;
+  --primary: #fcee0a;
+  --on-primary: #000000;
+  --ok: #00e0ee;
+  --track: #22222d;
+  --nav-idle: #ecead8;
+  --logo: #fcee0a;
+
+  --font: "Inter", system-ui, sans-serif;
+  --font-head: "Rajdhani", system-ui, sans-serif;
+  --font-num: "Rajdhani", system-ui, sans-serif;
+  --font-logo: "Orbitron", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --logo-weight: 900;
+  --logo-size: 19px;
+  --logo-track: 0.1em;
+  /* aberrazione cromatica statica, solo sul logo */
+  --logo-shadow: 1px 0 rgb(255 42 109 / 0.75), -1px 0 rgb(0 240 255 / 0.75);
+  --h1-size: 28px;
+  --num-weight: 600;
+  --case: uppercase;
+  --tracking: 0.04em;
+  --nav-size: 15px;
+  --radius: 0px;
+  --avatar-radius: 0px;
+  /* angolo tagliato solo su card e pulsanti (non su badge, step e righe di tabella) */
+  --clip: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  --clip-logo: polygon(0 0, 100% 0, 100% 70%, 70% 100%, 0 100%);
+  --btn-shadow: none;
+
+  --crit-fg: #ff2a6d;
+  --crit-bg: rgb(255 42 109 / 0.14);
+  --crit-bd: #ff2a6d;
+  --high-fg: #ff7a3d;
+  --high-bg: rgb(255 122 61 / 0.12);
+  --high-bd: #ff7a3d;
+  --med-fg: #fcee0a;
+  --med-bg: rgb(252 238 10 / 0.1);
+  --med-bd: #8a8306;
+  --low-fg: #00f0ff;
+  --low-bg: rgb(0 240 255 / 0.08);
+  --low-bd: #0b6c73;
+  --good-fg: #00f0ff;
+  --good-bg: rgb(0 240 255 / 0.1);
+  --good-bd: #00f0ff;
+  --bad-fg: #ff2a6d;
+  --bad-bg: rgb(255 42 109 / 0.12);
+  --bad-bd: #ff2a6d;
+  --warn-fg: #fcee0a;
+  --warn-bg: rgb(252 238 10 / 0.1);
+  --warn-bd: #fcee0a;
+  --idle-fg: #a3a3b2;
+  --idle-bg: transparent;
+  --idle-bd: #2c2c38;
+  --info-fg: #c9a8ff;
+  --info-bg: rgb(150 110 255 / 0.14);
+  --info-bd: #7c5cd6;
+
+  --bar-new: #00f0ff;
+  --bar-mr_open: #fcee0a;
+  --bar-needs_human: #ff2a6d;
+  --bar-ignored: #5a5a6a;
+  --kpi-1: #fcee0a;
+  --kpi-2: #00f0ff;
+  --kpi-3: #ecead8;
+  --kpi-4: #ff2a6d;
+  --kpi-top-1: #fcee0a;
+  --kpi-top-2: #00f0ff;
+  --kpi-top-3: #ecead8;
+  --kpi-top-4: #ff2a6d;
 }
 
-:root[data-theme="cyberpunk"] body {
-  background:
-    repeating-linear-gradient(0deg, rgb(255 255 255 / 0.02) 0 1px, transparent 1px 3px),
-    var(--color-bg);
-  color: var(--color-text);
-  font-family: var(--font-body);
+/* Le intestazioni di tabella restano in minuscolo come nel tema di default. */
+:root[data-theme="cyberpunk"] .th {
+  text-transform: none;
 }
 
-:root[data-theme="cyberpunk"] .card,
-:root[data-theme="cyberpunk"] .btn {
-  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%,
-                     var(--cut) 100%, 0 calc(100% - var(--cut)));
-}
-
-:root[data-theme="cyberpunk"] .logo {
-  font-family: var(--font-display);
-  letter-spacing: 0.12em;
-  text-shadow: 2px 0 var(--color-danger), -2px 0 var(--color-accent);
-}
-
+/* Glitch solo sul logo, solo al passaggio del mouse e solo se l'utente accetta animazioni. */
 @media (prefers-reduced-motion: no-preference) {
   :root[data-theme="cyberpunk"] .logo:hover {
-    animation: glitch 0.3s steps(2) 2;
+    animation: logo-glitch 0.3s steps(2) 2;
   }
 }
 
-@keyframes glitch {
-  0% { transform: translate(0); }
-  50% { transform: translate(-2px, 1px); }
-  100% { transform: translate(1px, -1px); }
+@keyframes logo-glitch {
+  0% {
+    transform: translate(0);
+  }
+  50% {
+    transform: translate(-1px, 1px);
+  }
+  100% {
+    transform: translate(1px, -1px);
+  }
 }

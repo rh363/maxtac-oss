@@ -43,7 +43,8 @@ services:
   # chiave Anthropic: db montato read-only, solo il client OIDC e la chiave delle sessioni.
   # La porta è pubblicata solo su loopback: davanti serve un reverse proxy con TLS.
   web:
-    image: autofix-orchestrator:latest
+    build: {context: ., dockerfile: Dockerfile.web}
+    image: autofix-web:latest
     restart: unless-stopped
     command: ["web"]
     profiles: [web]

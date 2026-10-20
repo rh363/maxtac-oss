@@ -5,7 +5,7 @@ Branch, label, commit e testo delle MR non passano mai da qui: su GitLab resta t
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from maxtac.domain.models import Outcome
 
@@ -29,6 +29,7 @@ class Lexicon:
     needs_human: str
     mr_open: str
     outcomes: dict[Outcome, str]
+    ui: dict[str, str] = field(default_factory=dict)  # override delle etichette web
 
     def money(self, usd: float) -> str:
         return f"{self.currency}{usd:.2f}"
@@ -62,31 +63,57 @@ NEUTRAL = Lexicon(
     },
 )
 
+# Tema dell'operatore, nella versione attenuata approvata: le etichette funzionali restano
+# chiare (sono le stesse del neutro); il gioco compare solo nel marchio, in piccoli sottotitoli
+# secondari e in qualche easter egg. Mai una parola del gioco come unica etichetta di un dato.
 CYBERPUNK = Lexicon(
     name="cyberpunk",
-    product="MAXTAC",
-    tagline="Night City non dorme. Nemmeno i tuoi bug.",
-    run="patrol",
-    finding="cyberpsycho",
-    findings="cyberpsycho",
-    triage="Trauma Team",
-    fixer="ripperdoc",
-    hunting="squadra MaxTac",
-    sandbox="braindance",
-    proxy="Blackwall",
-    spend="eddies bruciati",
-    currency="€$",
-    ignored="falsi allarmi NCPD",
-    needs_human="passati al fixer umano",
-    mr_open="bounty riscosse",
+    product="MaxTac",
+    tagline="Autofix · edizione operatore. Il Blackwall regge.",
+    run="run notturna",
+    finding="finding",
+    findings="finding",
+    triage="triage",
+    fixer="fix agent",
+    hunting="bug hunting",
+    sandbox="sandbox",
+    proxy="proxy egress (Blackwall)",
+    spend="spesa",
+    currency="$",
+    ignored="ignorati",
+    needs_human="serve un umano",
+    mr_open="MR aperte",
     outcomes={
-        Outcome.MR_OPENED: "neutralizzato, MR in coda",
-        Outcome.DRY_RUN: "neutralizzato in braindance (dry-run)",
-        Outcome.NEEDS_HUMAN: "serve un fixer umano",
-        Outcome.VERIFY_FAILED: "flatline in verifica",
-        Outcome.AGENT_FAILED: "il ripperdoc ha fallito",
-        Outcome.BUDGET_EXHAUSTED: "eddies finiti",
-        Outcome.ERROR: "glitch",
+        Outcome.MR_OPENED: "MR aperta",
+        Outcome.DRY_RUN: "dry run",
+        Outcome.NEEDS_HUMAN: "serve un umano",
+        Outcome.VERIFY_FAILED: "verifica fallita",
+        Outcome.AGENT_FAILED: "fix non riuscito",
+        Outcome.BUDGET_EXHAUSTED: "budget esaurito",
+        Outcome.ERROR: "errore",
+    },
+    # Override delle etichette della dashboard (chiavi di frontend/src/lib/lexicon/neutral.json)
+    ui={
+        "brand": "MaxTac",
+        "brandSub": "Autofix · edizione operatore",
+        "greeting": "Bentornato, {user}",
+        "nextRun": "Prossima run {time} · il Blackwall regge",
+        "nextRunNone": "Nessuna run pianificata · il Blackwall regge",
+        "find.subtitle": "Tutti i finding di scanner e bug hunting · bounty board",
+        "tag.byStatus": "bounty board",
+        "tag.runs": "log delle patrol",
+        "tag.hunt": "squadra MaxTac",
+        "tag.triage": "referto Trauma Team",
+        "tag.change": "note del ripperdoc",
+        "status.needs_human": "Serve un umano",
+        "outcome.needs_human": "Serve un umano",
+        "outcome.dry_run": "Dry run",
+        "kpi.human": "Serve un umano",
+        "kpi.humanSub": "In attesa di una review",
+        "task.gitlabNeutral": "su GitLab branch e testo restano neutri",
+        "costTip": "eddies",
+        "empty.runs": "Nessuna run ancora. Night City dorme, per ora.",
+        "empty.findings": "Nessun finding con questi filtri. Strade pulite.",
     },
 )
 

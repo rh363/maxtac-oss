@@ -1,0 +1,21 @@
+{
+	"_comment": "Termini del tema alternativo che un utente senza tema non deve mai vedere. Espressioni regolari, case-insensitive. Usati da tests/test_presentation.py (THEMED) e da frontend/scripts/check-bundle.mjs.",
+	"themed": [
+		"maxtac",
+		"cyberps",
+		"ripperdoc",
+		"trauma",
+		"night city",
+		"eddies",
+		"€\\$",
+		"blackwall",
+		"braindance",
+		"ncpd",
+		"netrunner",
+		"patrol",
+		"flatline",
+		"fixer umano",
+		"bounty"
+	],
+	"bundle_extra": ["cyberpunk", "rajdhani", "orbitron", "ibm plex", "fcee0a", "ff2a6d", "00f0ff"]
+}

@@ -411,7 +411,7 @@ def test_webhook_payload_is_neutral_and_errors_hide_url() -> None:
     [(got, body)] = sent
     data = json.loads(body)
     assert got == url and data["run_id"] == "n1" and data["text"].startswith("# Autofix")
-    for word in ("MAXTAC", CYBERPUNK.fixer, CYBERPUNK.finding, "eddies", "€$"):
+    for word in (CYBERPUNK.product, CYBERPUNK.tagline, "Blackwall", "eddies", "€$"):
         assert word not in data["text"]
 
     def boom(*a: Any) -> int:

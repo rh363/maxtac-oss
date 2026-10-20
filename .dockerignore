@@ -1,0 +1,14 @@
+.git
+.venv
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.mypy_cache
+secrets
+config.yaml
+frontend/node_modules
+frontend/build
+frontend/.svelte-kit
+frontend/test-results
+frontend/playwright-report
+docs

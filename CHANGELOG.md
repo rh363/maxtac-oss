@@ -9,6 +9,20 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+- Fase 5b: SPA della dashboard in `frontend/` (SvelteKit SPA, Svelte 5, TypeScript, Tailwind,
+  Zod, Lucide) dai mockup approvati: dashboard, finding con filtri nell'URL, storico e dettaglio
+  delle run con timeline per repo, dettaglio task con diff e output dei test. Responsive.
+- Tema per utente caricato a runtime (`/api/theme/<nome>/theme.css` e `lexicon.json`, font
+  self-hosted dallo stesso endpoint protetto); il bundle base contiene solo il tema di default,
+  verificato a ogni build con `web/theme-terms.json`.
+- FastAPI serve la build della SPA (`web.static_dir`) con fallback su `index.html`, cache
+  immutabile per gli asset e CSP con hash per lo script di avvio, senza `'unsafe-inline'`.
+- `/api/dashboard` espone anche repository, prossima run, MR massime e repo di bug hunting per
+  notte.
+- `Dockerfile.web` multi-stage (build Node, poi solo la build nell'immagine Python).
+- `scripts/seed-demo-db.py`: db e config demo per sviluppo e test e2e (Playwright) sui due
+  temi; test unitari vitest (client API e contratto con `web/openapi.json`, lessico, filtri,
+  formattazione); screenshot in `docs/screenshots/`.
 - Fase 0: modelli di dominio, porte, policy (fingerprint, dedup, raggruppamento CVE,
   priorità, rotazione del bug hunting, file protetti, scheduling) e budget con prezzi da config.
 - Servizi di triage, fix agent con loop agentico proprio, bug hunting e pipeline notturna
@@ -91,6 +105,10 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
   digest delle immagini (`scripts/pin-digests.sh`).
 
 ### Changed
+
+- Tema dell'operatore attenuato come da mockup approvato: etichette funzionali chiare in
+  CLI e dashboard, il tema resta in marchio, sottotitoli secondari, colori e font; la valuta è
+  sempre `$`. Lessico con override `ui` per le etichette della dashboard.
 
 - Il db SQLite usa il journal `DELETE` invece di WAL, così la dashboard può leggerlo da un
   mount in sola lettura.

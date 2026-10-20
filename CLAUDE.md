@@ -31,7 +31,12 @@ ci si ferma e si riassume.
 - Dashboard (`src/maxtac/web/`): sola lettura, db aperto con `connect_readonly`, nessun
   segreto del bot. Un utente senza tema assegnato non deve poter scoprire il tema alternativo:
   `theme: "default"`, asset 404 come per un tema inesistente, bundle base solo neutro.
-- Dopo una modifica all'API: `uv run maxtac web --export-openapi web/openapi.json`.
+- Dopo una modifica all'API: `uv run maxtac web --export-openapi web/openapi.json`, poi
+  allinea `frontend/src/lib/api/schemas.ts` (il test di contratto in vitest lo verifica).
+- Frontend (`frontend/`): etichette solo da `src/lib/lexicon/neutral.json` via `t()`, mai
+  stringhe, font o colori del tema alternativo nel bundle (`npm run build` lo controlla con
+  `web/theme-terms.json`). Niente `style="..."` statici né script inline nuovi: la CSP non ha
+  `'unsafe-inline'` (gli stili dinamici con `style:` passano dal CSSOM).
 
 ## Comandi
 
@@ -41,6 +46,7 @@ uv run pytest
 uv run ruff check src tests && uv run ruff format --check src tests
 uv run mypy src
 AUTOFIX_DOCKER_TESTS=1 uv run pytest -m docker   # solo con un daemon Docker
+cd frontend && npm run build && npm run check && npm run lint && npm test && npm run test:e2e
 ```
 
 Test prima (pytest, adapter finti in `tests/fakes.py`), poi implementazione, poi README e

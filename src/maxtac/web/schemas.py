@@ -68,6 +68,10 @@ class DashboardOut(_Out):
     hunting_enabled: bool
     hunting: list[HuntingSlotOut]
     recent_runs: list[RunSummaryOut]
+    repos: list[str]
+    max_mrs_per_night: int
+    hunting_per_night: int
+    next_run_at: datetime | None
 
 
 class FindingOut(_Out):
