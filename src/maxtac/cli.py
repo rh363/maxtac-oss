@@ -150,6 +150,7 @@ def cmd_status(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
             counts=c.store.counts_by_status(),
             open_mrs=c.store.open_mrs(),
             next_run=next_run_at(now, sched.at, sched.timezone).isoformat(),
+            runs=c.runs.recent_runs(5),
         )
     )
     return 0

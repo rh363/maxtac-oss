@@ -10,10 +10,11 @@ from datetime import UTC, datetime
 from maxtac.adapters.anthropic_llm import AnthropicLLM
 from maxtac.adapters.docker_sandbox import DockerSandbox, SandboxSpec
 from maxtac.adapters.gitlab_vcs import GitLabVCS
+from maxtac.adapters.notifier import NoopNotifier, WebhookNotifier
 from maxtac.adapters.scanners import build_scanners
-from maxtac.adapters.sqlite_store import SqliteBudget, SqliteStore, connect
+from maxtac.adapters.sqlite_store import SqliteBudget, SqliteRunStore, SqliteStore, connect
 from maxtac.config import AppConfig, Secrets, load_secrets
-from maxtac.domain.ports import ScannerPort
+from maxtac.domain.ports import NotifierPort, ScannerPort
 from maxtac.services.pipeline import Pipeline
 from maxtac.services.scan import ScanService
 
@@ -32,13 +33,14 @@ class Container:
     conn: sqlite3.Connection
     store: SqliteStore
     budget: SqliteBudget
+    runs: SqliteRunStore
     clock: Callable[[], datetime] = utcnow
     secrets: Secrets = field(default_factory=load_secrets)
 
     @classmethod
     def build(cls, config: AppConfig) -> Container:
         conn = connect(config.db_path)
-        return cls(config, conn, SqliteStore(conn), SqliteBudget(conn))
+        return cls(config, conn, SqliteStore(conn), SqliteBudget(conn), SqliteRunStore(conn))
 
     def vcs(self) -> GitLabVCS:
         token = self.secrets.gitlab_token
@@ -97,6 +99,18 @@ class Container:
             fallback_models=a.fallback_models,
         )
 
+    def notifier(self) -> NotifierPort:
+        n = self.config.notify
+        if not n.webhook:
+            return NoopNotifier()
+        url = self.secrets.notify_webhook_url
+        if url is None or not url.get_secret_value().strip():
+            raise MissingSecret(
+                "webhook di notifica attivo ma URL mancante "
+                "(/run/secrets/notify_webhook_url o NOTIFY_WEBHOOK_URL)"
+            )
+        return WebhookNotifier(url.get_secret_value().strip(), timeout_s=n.timeout_s)
+
     def pipeline(self, *, dry_run: bool) -> Pipeline:
         """Pipeline completa con gli adapter reali, segreti letti da Secrets()."""
         return Pipeline(
@@ -109,6 +123,8 @@ class Container:
             pricing=self.config.to_pricing(),
             settings=self.config.to_settings(dry_run=dry_run),
             clock=self.clock,
+            runs=self.runs,
+            notifier=self.notifier(),
         )
 
     def close(self) -> None:

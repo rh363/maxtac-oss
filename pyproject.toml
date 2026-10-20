@@ -23,6 +23,7 @@ dev = [
     "mypy>=1.13",
     "types-pyyaml",
     "types-docker>=7.2.0.20261006",
+    "bandit>=1.9.4",
 ]
 
 [build-system]

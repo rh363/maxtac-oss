@@ -13,8 +13,11 @@ spesa espliciti.
 | 0 | Dominio, porte, policy, config, store SQLite, adapter finti, CLI | fatta |
 | 1 | Immagine sandbox, `DockerSandbox`, parser degli scanner, proxy, checkout con git hardening, `GitLabVCS` | fatta |
 | 2 | CVE end-to-end: triage, fix agent, verifica, MR (`AnthropicLLM`) | fatta |
-| 3 | Finding SAST | da fare |
-| 4 | Bug hunting a rotazione sul diff recente | da fare |
+| 3 | Finding SAST: fix, falsi positivi ignorati, nessun finding nuovo introdotto | fatta |
+| 4 | Bug hunting a rotazione, test di regressione che fallisce sul base, storico run, notifica | fatta |
+
+Tutte le fasi sono verificate in locale (git reale, bandit reale, GitLab e modello finti). Cosa
+resta da verificare solo sulla VM vera è in [Go-live](#go-live).
 
 ## Come funziona una notte
 
@@ -22,18 +25,47 @@ Per ogni repo, in sequenza (un repo che fallisce non blocca gli altri):
 
 1. checkout con il token del bot, git dir separata dalla working tree;
 2. scan nel sandbox, senza token;
-3. dedup contro lo storico: si scartano finding ignorati, già con MR aperta, già passati a un
-   umano o falliti troppe volte. Una MR chiusa senza merge conta come rifiuto;
+3. dedup contro lo storico del repo (lo stesso finding in due repo sono due finding): si
+   scartano finding ignorati, già con MR aperta, già passati a un umano o falliti troppe volte.
+   Una MR chiusa senza merge conta come rifiuto. Il fingerprint non contiene la riga: un
+   finding SAST resta lo stesso quando il codice si sposta;
 4. le CVE dello stesso package diventano un solo task (un solo bump);
 5. triage (Haiku): una chiamata per repo, risposta JSON vincolata da schema: `fix`, `ignore`, `needs_human`.
    Un task senza verdetto valido va a un umano;
 6. fix agent (Sonnet): loop agentico proprio sulla Messages API, tool eseguiti solo nel sandbox;
-7. verifica indipendente in un sandbox nuovo: setup, test, rescan dello scanner d'origine.
-   Diff vuoto, test rossi o finding ancora presente fanno fallire il task. Un diff che tocca
-   test esistenti o la CI va a un umano; per i bug serve un test di regressione nuovo;
+7. verifica indipendente in un sandbox nuovo: setup, test, rescan del solo scanner d'origine.
+   Fanno fallire il task: diff vuoto, test rossi, finding ancora presente, oppure un finding
+   **nuovo** dello stesso scanner di severità almeno media (per SAST nei file toccati, per le CVE
+   ovunque: un bump verso una versione a sua volta vulnerabile). Un diff che tocca test
+   esistenti o la CI va a un umano;
 8. push e MR con label `autofix`, branch `autofix/<kind>/<fingerprint>`;
-9. bug hunting (Opus) solo sui repo scelti a rotazione;
-10. report su `workdir/<run_id>/report.md`.
+9. bug hunting (Opus) solo sui repo scelti a rotazione (vedi sotto);
+10. report su `workdir/<run_id>/report.md`, storico nel db (tabella `runs`, JSON completo con
+    esiti, costi e diff troncati: la base per la dashboard), notifica opzionale del mattino.
+
+### Bug hunting
+
+- **Rotazione.** Ogni notte `hunting.repos_per_night` repo: prima i mai cacciati, poi quelli
+  cacciati meno di recente; a parità (stessa notte) chi è stato cacciato meno volte.
+- **Input.** Diff degli ultimi `hunting.lookback_days` giorni più i file toccati ancora
+  esistenti. Si tengono solo i bug a confidenza `high`.
+- **Dedup stabile.** Il modello indica il simbolo (funzione, metodo o classe): il fingerprint è
+  file + simbolo, non il titolo, che cambia da una notte all'altra. Due bug nella stessa
+  funzione diventano un solo task: una MR per funzione alla volta.
+- **Test di regressione obbligatorio.** Il fix deve aggiungere un file di test nuovo, e quel
+  test deve **fallire sul codice base**: l'orchestrator fotografa i file del fix, riporta la
+  working tree al base, rimette solo i test nuovi, esegue `test_command` in un sandbox nuovo
+  (deve uscire con errore), poi ripristina il fix e controlla che il diff sia identico. Il
+  controllo usa l'intero `test_command`, quindi vale per qualunque linguaggio; il limite è che
+  un test già rosso sul base lo farebbe passare comunque, ma la verifica precedente richiede la
+  suite verde con il fix.
+
+### Notifica del mattino
+
+`notify.webhook: true` invia il riepilogo della notte con una POST JSON a un webhook generico
+(`text` è già nel formato degli incoming webhook di Slack e Mattermost). L'URL è un segreto
+(`secrets/notify_webhook_url`) e non compare mai negli errori. Il testo è sempre neutro. Un
+errore della notifica o del salvataggio dello storico non fa perdere il report.
 
 ## Architettura
 
@@ -122,7 +154,7 @@ Comandi:
 - `maxtac run --scan-only`: solo checkout e scan (tutti gli scanner, zero token): stampa i
   finding normalizzati e li scrive in `workdir/<run_id>/findings.json`. Non tocca lo store;
 - `maxtac patrol`: resta in esecuzione e lancia la run all'ora configurata (`schedule`);
-- `maxtac status`: spesa del mese, finding tracciati, MR aperte.
+- `maxtac status`: spesa del mese, finding tracciati, MR aperte, ultime run.
 
 Senza token GitLab o chiave Anthropic il codice d'uscita è 2, con un messaggio che dice cosa
 manca (mai il valore). `patrol` sopravvive a una run fallita: logga l'errore e aspetta la
@@ -176,6 +208,30 @@ docker compose run --rm orchestrator run --scan-only        # prova a costo zero
 L'immagine dei sandbox (Python 3.13, Go, Node LTS, osv-scanner, semgrep, bandit, gosec, versioni
 pinnate in `sandbox/Dockerfile`) va ricostruita ogni settimana: `scripts/rebuild-sandbox.sh`,
 da cron (l'esempio è nello script).
+
+## Go-live
+
+Verificato in locale: pipeline completa con git reale e remoto bare, bandit reale, una
+settimana di notti simulate (tetti, rotazione, nessuna MR doppia, merge a metà settimana).
+Verificabile solo sulla VM:
+
+- build delle immagini e allowlist reale di squid (scanner e package manager dietro proxy);
+- `DockerSandbox` con un daemon vero (`put_archive` su rootfs in sola lettura, limiti, rete
+  `internal`): `AUTOFIX_DOCKER_TESTS=1 uv run pytest -m docker`;
+- API GitLab della propria istanza (versione, permessi del bot, label);
+- chiamate vere alla Claude API: cache hit, fallback sui rifiuti, messaggio a crediti finiti.
+
+Checklist, una fase alla volta (ognuna si attiva solo dopo una notte pulita in dry-run):
+
+1. `run --scan-only` su tutti i repo: i finding normalizzati hanno senso, niente errori.
+2. **CVE** (`features.cve: true`, default): una notte `run --dry-run`, lettura di report e
+   diff; poi la prima run vera su un repo di prova con una dipendenza vulnerabile apposta.
+3. **SAST** (`features.sast: true`): una notte in dry-run; controllare che i falsi positivi
+   noti finiscano in `ignored` e che i fix non tocchino i test.
+4. **Bug hunting** (`features.hunting: true`): una notte in dry-run con
+   `hunting.repos_per_night: 1`, poi 2. Controllare in `status` spesa e proiezione del mese.
+5. Dopo una settimana: tarare i tetti (`budget.*`) sulla spesa vera e, se serve, attivare la
+   notifica del mattino.
 
 ### Git e checkout
 

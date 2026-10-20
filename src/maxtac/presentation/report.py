@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from maxtac.domain.models import FindingRecord, RunReport
+from maxtac.domain.models import FindingRecord, RunReport, RunSummary
 from maxtac.domain.policy import group_into_tasks
 from maxtac.services.scan import ScanResult
 
@@ -61,6 +61,7 @@ def render_status(
     credits_usd: float | None = None,
     day_of_month: int | None = None,
     days_in_month: int | None = None,
+    runs: Sequence[RunSummary] = (),
 ) -> str:
     total = sum(counts.values())
     # una MR può coprire più finding (CVE dello stesso package): una riga per MR
@@ -82,10 +83,16 @@ def render_status(
             lines.insert(4, "ATTENZIONE: la proiezione supera i crediti del mese")
     for mr in by_mr.values():
         lines.append(f"  - {mr['kind']} {mr['rule']} {mr['location']}: {mr['mr_url'] or '-'}")
+    if runs:
+        lines.append(f"ultime {lx.run}:")
+    for r in runs:
+        flags = " dry-run" if r.dry_run else ""
+        flags += f" interrotta ({r.aborted[:80]})" if r.aborted else ""
+        lines.append(f"  - {r.run_id}: {lx.money(r.spent_usd)}, {r.mrs_opened} MR{flags}")
     return "\n".join(lines)
 
 
-Lookup = Callable[[str], FindingRecord | None]
+Lookup = Callable[[str, str], FindingRecord | None]  # (project, fingerprint)
 
 
 def render_scan(results: Sequence[ScanResult], lx: Lexicon, lookup: Lookup) -> str:
@@ -99,7 +106,7 @@ def render_scan(results: Sequence[ScanResult], lx: Lexicon, lookup: Lookup) -> s
             f"- {lx.findings}: {len(res.findings)}, task: {len(tasks)}",
         ]
         for f in sorted(res.findings, key=lambda f: (-f.severity, f.kind, f.rule, f.location)):
-            rec = lookup(f.fingerprint)
+            rec = lookup(res.repo.project, f.fingerprint)
             state = rec.status.value if rec else "new"
             where = f"{f.location}:{f.line}" if f.line else f.location
             lines.append(
@@ -118,7 +125,7 @@ def scan_json(results: Sequence[ScanResult], lookup: Lookup) -> str:
     for res in results:
         findings = []
         for f in res.findings:
-            rec = lookup(f.fingerprint)
+            rec = lookup(res.repo.project, f.fingerprint)
             findings.append(
                 {
                     "fingerprint": f.fingerprint,

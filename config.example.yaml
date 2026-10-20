@@ -53,6 +53,11 @@ vcs:
   mr_labels: [autofix]
 
 # Tema della CLI (e in futuro della dashboard) per utente. Non cambia nulla su GitLab.
+notify:
+  # riepilogo del mattino su un webhook generico (Slack, Mattermost, n8n...): testo neutro.
+  # L'URL è un segreto: /run/secrets/notify_webhook_url
+  webhook: false
+
 ui:
   default_theme: neutral
   themes:

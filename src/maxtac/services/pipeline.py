@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shlex
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -12,7 +13,9 @@ from maxtac.domain.budget import BudgetExceeded, Meter, NightBudget, Pricing
 from maxtac.domain.models import (
     Checkout,
     Decision,
+    FileChange,
     Finding,
+    FindingRecord,
     FindingStatus,
     FixResult,
     Outcome,
@@ -23,9 +26,11 @@ from maxtac.domain.models import (
     Verdict,
 )
 from maxtac.domain.policy import (
+    added_tests,
     adds_test,
     branch_name,
     group_into_tasks,
+    introduced_findings,
     pick_hunting_repos,
     protected_changes,
     select_actionable,
@@ -36,6 +41,8 @@ from maxtac.domain.ports import (
     FindingStore,
     LLMPort,
     LLMUnavailable,
+    NotifierPort,
+    RunStore,
     Sandbox,
     SandboxPort,
     ScannerPort,
@@ -92,6 +99,7 @@ class SetupFailed(Exception):
 @dataclass
 class _Night:
     budget: NightBudget
+    started_at: datetime
     mrs: int = 0
     hunt_spent: float = 0.0
     verdicts: dict[str, Verdict] = field(default_factory=dict)
@@ -108,6 +116,8 @@ class Pipeline:
     pricing: Pricing
     settings: PipelineSettings
     clock: Callable[[], datetime]
+    runs: RunStore | None = None
+    notifier: NotifierPort | None = None
 
     def __post_init__(self) -> None:
         m, lim = self.settings.models, self.settings.limits
@@ -121,12 +131,17 @@ class Pipeline:
         s = self.settings
         run_id = run_id or self.clock().strftime("%Y%m%dT%H%M%SZ")
         night = _Night(
-            NightBudget(self.budget, self.pricing, run_id, s.limits.per_night_usd, self.clock)
+            NightBudget(self.budget, self.pricing, run_id, s.limits.per_night_usd, self.clock),
+            started_at=self.clock(),
         )
-        report = RunReport(run_id, s.dry_run, night_cap_usd=s.limits.per_night_usd)
+        report = RunReport(
+            run_id, s.dry_run, night_cap_usd=s.limits.per_night_usd, started_at=night.started_at
+        )
         hunt = set()
         if "bug" in s.enabled_kinds:
-            picked = pick_hunting_repos(repos, self.store.last_hunted, s.hunting_repos_per_night)
+            picked = pick_hunting_repos(
+                repos, self.store.last_hunted, s.hunting_repos_per_night, self.store.hunt_count
+            )
             hunt = {r.project for r in picked}
 
         for repo in repos:
@@ -146,7 +161,22 @@ class Pipeline:
                 rr.errors.append(f"{type(e).__name__}: {e}")
             report.repos.append(rr)
         report.spent_usd = night.budget.spent
+        report.finished_at = self.clock()
+        self._publish(report)
         return report
+
+    def _publish(self, report: RunReport) -> None:
+        """Storico e notifica: un loro errore non deve far perdere il report della notte."""
+        if self.runs is not None:
+            try:
+                self.runs.save_run(report)
+            except Exception:
+                log.exception("salvataggio della run %s fallito", report.run_id)
+        if self.notifier is not None:
+            try:
+                self.notifier.notify(report)
+            except Exception:
+                log.exception("notifica della run %s fallita", report.run_id)
 
     def _run_repo(self, repo: RepoConfig, night: _Night, rr: RepoReport, *, hunt: bool) -> None:
         workdir = self.settings.workdir / night.budget.run_id / repo.slug
@@ -155,17 +185,20 @@ class Pipeline:
         with self.sandboxes.open(co.worktree) as sb:
             findings = run_scanners(sb, scanners, rr.errors)
         rr.findings_total = len(findings)
-        self.store.observe(findings, self.clock())
+        baseline = frozenset(f.fingerprint for f in findings)
+        self.store.observe(repo.project, findings, self.clock())
         self._reconcile_open_mrs(repo, findings)
 
-        actionable = select_actionable(findings, self.store.get, self.settings.limits.max_attempts)
+        actionable = select_actionable(
+            findings, self._lookup(repo), self.settings.limits.max_attempts
+        )
         rr.findings_new = len(actionable)
         tasks = self._drop_open_mrs(repo, group_into_tasks(actionable), rr)
         if tasks:
             to_fix = self._triage(repo, tasks, night, rr)
-            self._fix_tasks(co, repo, to_fix, scanners, night, rr)
+            self._fix_tasks(co, repo, to_fix, scanners, baseline, night, rr)
         if hunt:
-            self._hunt(co, repo, scanners, night, rr)
+            self._hunt(co, repo, scanners, baseline, night, rr)
 
     # --- dedup contro le MR ---
 
@@ -175,14 +208,14 @@ class Pipeline:
         Lo trattiamo come rifiutato da un umano, così non riapriamo la stessa MR ogni notte.
         """
         for f in findings:
-            rec = self.store.get(f.fingerprint)
+            rec = self.store.get(repo.project, f.fingerprint)
             if (
                 rec
                 and rec.status is FindingStatus.MR_OPEN
                 and rec.branch
                 and not self.vcs.has_open_mr(repo, rec.branch)
             ):
-                self._set_status(f, FindingStatus.IGNORED, "MR chiusa senza merge")
+                self._set_status(repo, f, FindingStatus.IGNORED, "MR chiusa senza merge")
 
     def _drop_open_mrs(self, repo: RepoConfig, tasks: list[Task], rr: RepoReport) -> list[Task]:
         keep = []
@@ -191,7 +224,7 @@ class Pipeline:
             if self.vcs.has_open_mr(repo, branch):
                 rr.skipped_open_mr += 1
                 for f in t.findings:
-                    self._set_status(f, FindingStatus.MR_OPEN, "MR già aperta", branch=branch)
+                    self._set_status(repo, f, FindingStatus.MR_OPEN, "MR già aperta", branch=branch)
             else:
                 keep.append(t)
         return keep
@@ -223,7 +256,7 @@ class Pipeline:
                 (t, v.reason)
             )
             for f in t.findings:
-                self._set_status(f, status, v.reason)
+                self._set_status(repo, f, status, v.reason)
         return to_fix
 
     # --- fix, verifica, MR ---
@@ -234,6 +267,7 @@ class Pipeline:
         repo: RepoConfig,
         tasks: Sequence[Task],
         scanners: Sequence[ScannerPort],
+        baseline: frozenset[str],
         night: _Night,
         rr: RepoReport,
     ) -> None:
@@ -243,7 +277,7 @@ class Pipeline:
             if night.budget.remaining <= 0:
                 rr.fixes.append(FixResult(task, Outcome.BUDGET_EXHAUSTED, 0.0, "tetto della notte"))
                 break
-            result = self._fix_one(co, repo, task, scanners, night)
+            result = self._fix_one(co, repo, task, scanners, baseline, night)
             if result.outcome in (Outcome.MR_OPENED, Outcome.DRY_RUN):
                 night.mrs += 1
             rr.fixes.append(result)
@@ -254,11 +288,12 @@ class Pipeline:
         repo: RepoConfig,
         task: Task,
         scanners: Sequence[ScannerPort],
+        baseline: frozenset[str],
         night: _Night,
     ) -> FixResult:
         lim = self.settings.limits
         branch = branch_name(task, self.settings.branch_prefix)
-        meter = night.budget.meter(f"fix:{task.fingerprint}", lim.per_task_usd)
+        meter = night.budget.meter(f"fix:{repo.slug}:{task.fingerprint}", lim.per_task_usd)
         try:
             self.vcs.start_branch(co, branch)
             with self.sandboxes.open(co.worktree) as sb:
@@ -266,30 +301,34 @@ class Pipeline:
                 agent = self.ripperdoc.fix(repo, task, sb, meter)
             if not agent.finished:
                 if agent.stop == "budget":
-                    return self._budget_stop(task, meter, branch)
+                    return self._budget_stop(repo, task, meter, branch)
                 return self._failed(
-                    task, Outcome.AGENT_FAILED, meter, f"agente fermo: {agent.stop}"
+                    repo, task, Outcome.AGENT_FAILED, meter, f"agente fermo: {agent.stop}"
                 )
 
             changes = self.vcs.changes(co)
             if not changes:
-                return self._failed(task, Outcome.AGENT_FAILED, meter, "diff vuoto")
+                return self._failed(repo, task, Outcome.AGENT_FAILED, meter, "diff vuoto")
             protected = protected_changes(changes)
             if protected:
                 reason = "il fix tocca test o CI esistenti: " + ", ".join(protected)
                 for f in task.findings:
-                    self._set_status(f, FindingStatus.NEEDS_HUMAN, reason)
+                    self._set_status(repo, f, FindingStatus.NEEDS_HUMAN, reason)
                 return FixResult(
                     task, Outcome.NEEDS_HUMAN, meter.spent, reason, branch, diff=self.vcs.diff(co)
                 )
             if task.kind == "bug" and not adds_test(changes):
                 return self._failed(
-                    task, Outcome.VERIFY_FAILED, meter, "manca il test di regressione"
+                    repo, task, Outcome.VERIFY_FAILED, meter, "manca il test di regressione"
                 )
 
-            ok, verify_log = self._verify(co, repo, task, scanners)
+            ok, verify_log = self._verify(co, repo, task, scanners, changes, baseline)
             if not ok:
-                return self._failed(task, Outcome.VERIFY_FAILED, meter, verify_log)
+                return self._failed(repo, task, Outcome.VERIFY_FAILED, meter, verify_log)
+            if task.kind == "bug":
+                ok, why = self._regression_fails_on_base(co, repo, changes)
+                if not ok:
+                    return self._failed(repo, task, Outcome.VERIFY_FAILED, meter, why)
 
             diff = self.vcs.diff(co)
             if self.settings.dry_run:
@@ -302,10 +341,12 @@ class Pipeline:
             )
             url = self.vcs.open_mr(repo, branch, mr_title(task), body, self.settings.mr_labels)
             for f in task.findings:
-                self._set_status(f, FindingStatus.MR_OPEN, "MR aperta", mr_url=url, branch=branch)
+                self._set_status(
+                    repo, f, FindingStatus.MR_OPEN, "MR aperta", mr_url=url, branch=branch
+                )
             return FixResult(task, Outcome.MR_OPENED, meter.spent, agent.summary, branch, url, diff)
         except BudgetExceeded:
-            return self._budget_stop(task, meter, branch)
+            return self._budget_stop(repo, task, meter, branch)
         except SetupFailed as e:
             # problema d'ambiente, non del finding: nessun tentativo consumato
             return FixResult(task, Outcome.ERROR, meter.spent, str(e), branch)
@@ -328,9 +369,13 @@ class Pipeline:
         repo: RepoConfig,
         task: Task,
         scanners: Sequence[ScannerPort],
+        changes: Sequence[FileChange],
+        baseline: frozenset[str],
     ) -> tuple[bool, str]:
-        """Verifica indipendente in un sandbox nuovo: test verdi e finding spariti."""
+        """Verifica indipendente in un sandbox nuovo: test verdi, finding spariti e nessun
+        finding nuovo dello stesso scanner. Si rilanciano solo gli scanner del task."""
         by_name = {sc.name: sc for sc in scanners}
+        touched = {c.path for c in changes}
         with self.sandboxes.open(co.worktree) as sb:
             self._setup(repo, sb)
             tests = sb.exec(repo.test_command, timeout=TEST_TIMEOUT)
@@ -344,24 +389,66 @@ class Pipeline:
                 sc = by_name.get(tool)
                 if sc is None:
                     return False, f"scanner {tool} non disponibile per il rescan"
-                still = wanted & {f.fingerprint for f in sc.scan(sb)}
-                if still:
+                found = sc.scan(sb)
+                if wanted & {f.fingerprint for f in found}:
                     return False, f"{tool}: finding ancora presente dopo il fix"
+                new = introduced_findings(task, found, baseline, touched)
+                if new:
+                    listed = ", ".join(f"{f.rule} @ {f.location}" for f in new[:5])
+                    return False, f"{tool}: il fix introduce finding nuovi: {listed}"
         return True, out
 
-    def _budget_stop(self, task: Task, meter: Meter, branch: str) -> FixResult:
+    def _regression_fails_on_base(
+        self, co: Checkout, repo: RepoConfig, changes: Sequence[FileChange]
+    ) -> tuple[bool, str]:
+        """Il test di regressione deve fallire sul codice base, altrimenti non prova il bug.
+
+        Si fotografano i file del fix, si riporta la working tree al base, si rimettono solo
+        i test nuovi e si lancia `test_command`: deve uscire con errore. Poi si ripristina il
+        fix e si controlla che il diff sia identico a prima.
+        """
+        tests = added_tests(changes)
+        deleted = [c.path for c in changes if c.status == "deleted"]
+        with self.sandboxes.open(co.worktree) as sb:
+            snapshot = {c.path: sb.read(c.path) for c in changes if c.status != "deleted"}
+        try:
+            self.vcs.reset(co)
+            with self.sandboxes.open(co.worktree) as sb:
+                for path in tests:
+                    sb.write(path, snapshot[path])
+                self._setup(repo, sb)
+                base = sb.exec(repo.test_command, timeout=TEST_TIMEOUT)
+        finally:
+            self.vcs.reset(co)
+            with self.sandboxes.open(co.worktree) as sb:
+                for path, content in snapshot.items():
+                    sb.write(path, content)
+                for path in deleted:
+                    sb.exec(f"rm -f -- {shlex.quote(path)}", timeout=60)
+        if sorted(self.vcs.changes(co), key=lambda c: c.path) != sorted(
+            changes, key=lambda c: c.path
+        ):
+            raise RuntimeError("ripristino del fix non riuscito dopo il controllo sul base")
+        if base.ok:
+            return False, "il test di regressione passa anche senza il fix: non dimostra il bug"
+        return True, truncate(base.output, 2000)
+
+    def _budget_stop(self, repo: RepoConfig, task: Task, meter: Meter, branch: str) -> FixResult:
         # Se è finito il tetto del task il finding è costoso: conta come tentativo.
         # Se è finito quello della notte, il finding non ha colpe.
         if meter.spent >= meter.cap_usd:
-            return self._failed(task, Outcome.BUDGET_EXHAUSTED, meter, "tetto del task")
+            return self._failed(repo, task, Outcome.BUDGET_EXHAUSTED, meter, "tetto del task")
         return FixResult(task, Outcome.BUDGET_EXHAUSTED, meter.spent, "tetto della notte", branch)
 
-    def _failed(self, task: Task, outcome: Outcome, meter: Meter, reason: str) -> FixResult:
+    def _failed(
+        self, repo: RepoConfig, task: Task, outcome: Outcome, meter: Meter, reason: str
+    ) -> FixResult:
         if not self.settings.dry_run:
             for f in task.findings:
-                n = self.store.record_failed_attempt(f.fingerprint, reason[:500])
+                n = self.store.record_failed_attempt(repo.project, f.fingerprint, reason[:500])
                 if n >= self.settings.limits.max_attempts:
                     self.store.set_status(
+                        repo.project,
                         f.fingerprint,
                         FindingStatus.NEEDS_HUMAN,
                         f"{n} tentativi falliti: {reason[:300]}",
@@ -375,6 +462,7 @@ class Pipeline:
         co: Checkout,
         repo: RepoConfig,
         scanners: Sequence[ScannerPort],
+        baseline: frozenset[str],
         night: _Night,
         rr: RepoReport,
     ) -> None:
@@ -392,17 +480,22 @@ class Pipeline:
         finally:
             night.hunt_spent += meter.spent
         if not self.settings.dry_run:
-            self.store.mark_hunted(repo.project, self.clock())
-        self.store.observe(bugs, self.clock())
-        actionable = select_actionable(bugs, self.store.get, self.settings.limits.max_attempts)
+            self.store.mark_hunted(repo.project, night.started_at)
+        self.store.observe(repo.project, bugs, self.clock())
+        self._reconcile_open_mrs(repo, bugs)
+        actionable = select_actionable(bugs, self._lookup(repo), self.settings.limits.max_attempts)
         rr.bugs_found = len(actionable)
         tasks = self._drop_open_mrs(repo, group_into_tasks(actionable), rr)
-        self._fix_tasks(co, repo, tasks, scanners, night, rr)
+        self._fix_tasks(co, repo, tasks, scanners, baseline, night, rr)
 
     # --- persistenza (in dry-run lo stato dei finding non cambia) ---
 
+    def _lookup(self, repo: RepoConfig) -> Callable[[str], FindingRecord | None]:
+        return lambda fp: self.store.get(repo.project, fp)
+
     def _set_status(
         self,
+        repo: RepoConfig,
         f: Finding,
         status: FindingStatus,
         reason: str,
@@ -411,4 +504,6 @@ class Pipeline:
         branch: str | None = None,
     ) -> None:
         if not self.settings.dry_run:
-            self.store.set_status(f.fingerprint, status, reason, mr_url=mr_url, branch=branch)
+            self.store.set_status(
+                repo.project, f.fingerprint, status, reason, mr_url=mr_url, branch=branch
+            )

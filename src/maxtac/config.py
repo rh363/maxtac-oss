@@ -121,6 +121,12 @@ class VCSConf(_Model):
     mr_labels: list[str] = Field(default_factory=lambda: ["autofix"])
 
 
+class NotifyConf(_Model):
+    # URL del webhook come segreto (notify_webhook_url): spesso contiene un token
+    webhook: bool = False
+    timeout_s: float = Field(default=10.0, gt=0)
+
+
 class UIConf(_Model):
     default_theme: ThemeName = "neutral"
     themes: dict[str, ThemeName] = Field(default_factory=dict)
@@ -163,6 +169,7 @@ class AppConfig(_Model):
     features: FeaturesConf = FeaturesConf()
     vcs: VCSConf = VCSConf()
     ui: UIConf = UIConf()
+    notify: NotifyConf = NotifyConf()
     sandbox: SandboxConf = SandboxConf()
     scanners: ScannersConf = ScannersConf()
     workdir: Path = Path("/var/lib/autofix/work")
@@ -243,12 +250,14 @@ class AppConfig(_Model):
 
 
 class Secrets(BaseSettings):
-    """Letti da /run/secrets/<nome> (Docker secret) o da ANTHROPIC_API_KEY e GITLAB_TOKEN."""
+    """Letti da /run/secrets/<nome> (Docker secret) o dalle variabili d'ambiente omonime
+    (ANTHROPIC_API_KEY, GITLAB_TOKEN, NOTIFY_WEBHOOK_URL)."""
 
     model_config = SettingsConfigDict()  # secrets_dir passato da load_secrets()
 
     anthropic_api_key: SecretStr | None = None
     gitlab_token: SecretStr | None = None
+    notify_webhook_url: SecretStr | None = None
 
 
 SECRETS_DIR = Path("/run/secrets")

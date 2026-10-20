@@ -5,11 +5,19 @@ from __future__ import annotations
 import fnmatch
 import posixpath
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from .models import FileChange, Finding, FindingRecord, FindingStatus, RepoConfig, Task
+from .models import (
+    FileChange,
+    Finding,
+    FindingRecord,
+    FindingStatus,
+    RepoConfig,
+    Severity,
+    Task,
+)
 
 SUPPRESSED = {FindingStatus.IGNORED, FindingStatus.NEEDS_HUMAN, FindingStatus.MR_OPEN}
 
@@ -86,12 +94,20 @@ def pick_hunting_repos(
     repos: Sequence[RepoConfig],
     last_hunted: Callable[[str], datetime | None],
     n: int,
+    hunt_count: Callable[[str], int] = lambda project: 0,
 ) -> list[RepoConfig]:
-    """Rotazione: prima i repo mai cacciati, poi quelli cacciati meno di recente."""
+    """Rotazione: prima i repo mai cacciati, poi quelli cacciati meno di recente.
 
-    def key(r: RepoConfig) -> tuple[int, datetime, str]:
+    I repo cacciati nella stessa notte hanno lo stesso istante (l'inizio della run): a parità
+    vince chi è stato cacciato meno volte, così l'ordine nel file di config non favorisce
+    sempre i primi repo.
+    """
+
+    def key(r: RepoConfig) -> tuple[int, datetime, int, str]:
         when = last_hunted(r.project)
-        return (0, datetime.min, r.project) if when is None else (1, when, r.project)
+        if when is None:
+            return (0, datetime.min, 0, r.project)
+        return (1, when, hunt_count(r.project), r.project)
 
     return sorted(repos, key=key)[: max(0, n)]
 
@@ -120,6 +136,37 @@ def protected_changes(changes: Iterable[FileChange]) -> list[str]:
 def adds_test(changes: Iterable[FileChange]) -> bool:
     """Per i bug serve un test di regressione nuovo."""
     return any(c.status == "added" and is_test_path(c.path) for c in changes)
+
+
+def added_tests(changes: Iterable[FileChange]) -> list[str]:
+    return [c.path for c in changes if c.status == "added" and is_test_path(c.path)]
+
+
+# Un fix non deve introdurre finding nuovi dello stesso scanner. Sotto questa soglia
+# (es. bandit B603 dopo aver tolto shell=True) il finding nuovo è rumore e non blocca.
+NEW_FINDING_MIN_SEVERITY = Severity.MEDIUM
+
+
+def introduced_findings(
+    task: Task,
+    found: Iterable[Finding],
+    baseline: Collection[str],
+    touched: Collection[str],
+    min_severity: Severity = NEW_FINDING_MIN_SEVERITY,
+) -> list[Finding]:
+    """Finding emersi dopo il fix e assenti nello scan iniziale della notte.
+
+    Per SAST contano solo i file toccati dal fix (il resto del repo non è cambiato); per le
+    CVE conta tutto, perché la location è `package@versione` (es. un bump verso una
+    versione a sua volta vulnerabile).
+    """
+    return [
+        f
+        for f in found
+        if f.fingerprint not in baseline
+        and f.severity >= min_severity
+        and (task.kind == "cve" or f.location in touched)
+    ]
 
 
 def safe_relpath(path: str) -> str:

@@ -32,6 +32,11 @@ BUGS_TOOL = ToolSpec(
                     "properties": {
                         "file": {"type": "string"},
                         "line": {"type": "integer"},
+                        "symbol": {
+                            "type": "string",
+                            "description": "Function, method or class containing the bug "
+                            "(e.g. Parser.parse_header); empty if module level",
+                        },
                         "title": {"type": "string", "description": "Short, stable name"},
                         "detail": {"type": "string"},
                         "severity": {
@@ -54,7 +59,17 @@ FILES_TOTAL_LIMIT = 200_000
 
 
 def slugify(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:80] or "bug"
+    return re.sub(r"[^a-z0-9_.]+", "-", text.lower()).strip("-")[:80] or "bug"
+
+
+def bug_rule(symbol: str, title: str) -> str:
+    """Regola stabile tra notti: il titolo scelto dal modello cambia, il simbolo no.
+
+    Con il simbolo il fingerprint diventa file + simbolo: due bug diversi nella stessa
+    funzione finiscono nello stesso task, e va bene (una MR per funzione alla volta).
+    """
+    symbol = symbol.strip()
+    return f"symbol:{slugify(symbol)}" if symbol else f"title:{slugify(title)}"
 
 
 @dataclass
@@ -110,10 +125,10 @@ class Hunter:
                 Finding(
                     kind="bug",
                     tool="hunter",
-                    rule=slugify(str(b.get("title", ""))),
+                    rule=bug_rule(str(b.get("symbol") or ""), str(b.get("title", ""))),
                     location=location,
                     severity=Severity.parse(str(b.get("severity"))),
-                    detail=str(b.get("detail", ""))[:4000],
+                    detail=f"{b.get('title', '')}\n{b.get('detail', '')}".strip()[:4000],
                     line=line if isinstance(line, int) else None,
                 )
             )

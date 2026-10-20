@@ -37,8 +37,28 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 - `status` mostra la spesa del mese rispetto a `budget.monthly_credits_usd`, la proiezione a fine
   mese e un avviso se la supera.
 - Test d'integrazione della Fase 2 con git reale: dipendenza vulnerabile → MR con il bump pushato.
+- Fase 3: la verifica fallisce se il fix introduce un finding nuovo dello stesso scanner di
+  severità almeno media (SAST nei file toccati, CVE ovunque); il rescan rilancia solo gli
+  scanner che hanno prodotto il finding.
+- Test d'integrazione della Fase 3 con bandit reale: `shell=True` → MR verificata, falso positivo
+  noto ignorato, fingerprint stabili su due notti con il codice spostato.
+- Fase 4: il test di regressione di un bug deve fallire sul codice base (controllo in un
+  sandbox nuovo con i soli test aggiunti, poi ripristino e confronto del diff).
+- Bug hunting: campo `symbol` nello schema, fingerprint dei bug su file + simbolo invece che sul
+  titolo; le MR chiuse senza merge valgono come rifiuto anche per i bug.
+- Rotazione del bug hunting più equa: a parità di notte vince il repo cacciato meno volte.
+- Storico delle run (`RunStore`, tabella `runs` con il report JSON completo) e ultime run in
+  `status`.
+- Notifica del mattino (`NotifierPort`): `NoopNotifier` di default, `WebhookNotifier` con POST
+  JSON, URL da segreto, testo sempre neutro.
+- Simulazione di una settimana di notti: tetti di spesa, MR per notte, rotazione, nessuna MR
+  doppia.
 
 ### Changed
+
+- Lo store dei finding è per repo (chiave progetto + fingerprint): prima la stessa CVE in due
+  repo condivideva lo stato, e un finding ignorato in un repo veniva soppresso anche negli altri.
+- La spesa dei task è registrata con scope `fix:<repo>:<task>`, distinto tra repo.
 
 - Una chiamata servita da un modello senza prezzo in config (fallback lato server) si conta al
   prezzo più alto noto invece di fallire dopo aver già speso.

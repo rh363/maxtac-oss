@@ -102,7 +102,7 @@ class World:
         return self.pipeline.run_night(self.repos, run_id=f"night-{self.nights}", **kw)
 
     def status(self, finding):
-        rec = self.store.get(finding.fingerprint)
+        rec = self.store.get("alex/ecs2", finding.fingerprint)
         return rec.status if rec else None
 
 
@@ -134,7 +134,7 @@ def test_cve_fixed_verified_and_mr_opened(world):
     [(_, branch, tree)] = w.gl.pushed
     assert tree["requirements.txt"] == "requests==2.32.3\n"
     for f in cve_findings():
-        rec = w.store.get(f.fingerprint)
+        rec = w.store.get("alex/ecs2", f.fingerprint)
         assert (
             rec.status is FindingStatus.MR_OPEN and rec.branch == branch and rec.mr_url == fx.mr_url
         )
@@ -171,7 +171,7 @@ def test_red_tests_count_attempts_then_needs_human(world):
     first = w.run()
     assert first.repos[0].fixes[0].outcome is Outcome.VERIFY_FAILED
     assert "test rossi" in first.repos[0].fixes[0].detail
-    assert {w.store.get(f.fingerprint).attempts for f in cve_findings()} == {1}
+    assert {w.store.get("alex/ecs2", f.fingerprint).attempts for f in cve_findings()} == {1}
     assert w.gl.mrs == []
 
     w.run()
@@ -260,7 +260,7 @@ def test_night_budget_exhausted_stops_next_tasks(world):
     first, second = report.repos[0].fixes
     assert first.outcome is Outcome.MR_OPENED
     assert second.outcome is Outcome.BUDGET_EXHAUSTED and second.detail == "tetto della notte"
-    assert w.store.get(second.task.findings[0].fingerprint).attempts == 0
+    assert w.store.get("alex/ecs2", second.task.findings[0].fingerprint).attempts == 0
     assert len(w.llm.turn_calls) == 2
 
 
@@ -271,7 +271,7 @@ def test_task_budget_counts_as_attempt(world):
     w = world(turns=[tool_turn(call("list_files"), usage=big)])
     [fx] = w.run().repos[0].fixes
     assert fx.outcome is Outcome.BUDGET_EXHAUSTED and fx.detail == "tetto del task"
-    assert {w.store.get(f.fingerprint).attempts for f in cve_findings()} == {1}
+    assert {w.store.get("alex/ecs2", f.fingerprint).attempts for f in cve_findings()} == {1}
 
 
 def test_broken_repo_does_not_block_others(world):
@@ -298,7 +298,7 @@ def test_setup_failure_is_error_without_attempt(world):
     w = world(handler=handler)
     [fx] = w.run().repos[0].fixes
     assert fx.outcome is Outcome.ERROR and "setup fallito" in fx.detail
-    assert {w.store.get(f.fingerprint).attempts for f in cve_findings()} == {0}
+    assert {w.store.get("alex/ecs2", f.fingerprint).attempts for f in cve_findings()} == {0}
     assert w.llm.turn_calls == []
 
 
@@ -328,6 +328,13 @@ BUG = {
     "confidence": "high",
 }
 MAYBE = {**BUG, "title": "Forse", "confidence": "medium"}
+
+
+def div_zero_tests(cmd, files):
+    """Il test di regressione fallisce se c'è ma il codice non gestisce b == 0."""
+    if cmd == "pytest -q" and "tests/test_div_zero.py" in files and "if b" not in files["app.py"]:
+        return ExecResult(1, "FAILED tests/test_div_zero.py::test_zero - ZeroDivisionError")
+    return ExecResult(0, "ok")
 
 
 def hunting_world(world, turns, bugs=(BUG, MAYBE), **kw):
@@ -377,10 +384,32 @@ def test_hunting_bug_with_regression_test_opens_mr(world):
         ),
         end_turn("gestito b == 0"),
     ]
-    w = hunting_world(world, turns, bugs=[BUG])
+    w = hunting_world(world, turns, bugs=[BUG], handler=div_zero_tests)
     [fx] = w.run().repos[0].fixes
     assert fx.outcome is Outcome.MR_OPENED and fx.branch.startswith("autofix/bug/")
     assert "bug ad alta confidenza" in w.gl.mrs[0]["body"]
+    # il controllo sul base ha ripristinato il fix: il push contiene fix e test
+    [(_, _, pushed)] = w.gl.pushed
+    assert "if b" in pushed["app.py"] and "tests/test_div_zero.py" in pushed
+
+
+def test_regression_test_passing_on_base_is_rejected(world, store):
+    turns = [
+        tool_turn(
+            call(
+                "write_file",
+                path="app.py",
+                content="def div(a, b):\n    return a / b if b else 0\n",
+            ),
+            call("write_file", path="tests/test_div_zero.py", content="def test_zero(): ...\n"),
+        ),
+        end_turn(),
+    ]
+    w = hunting_world(world, turns, bugs=[BUG])  # i test passano sempre, anche sul base
+    [fx] = w.run().repos[0].fixes
+    assert fx.outcome is Outcome.VERIFY_FAILED and "passa anche senza il fix" in fx.detail
+    assert w.gl.mrs == []
+    assert store.get("alex/ecs2", fx.task.findings[0].fingerprint).attempts == 1
 
 
 def test_hunting_rotation(world):
@@ -424,7 +453,7 @@ def test_llm_unavailable_stops_the_night_without_attempts(world):
     assert second.findings_total == 0 and second.errors[0].startswith("non eseguito")
     # nessun tentativo contato: i finding restano nuovi e riprovabili la notte dopo
     for f in cve_findings():
-        rec = w.store.get(f.fingerprint)
+        rec = w.store.get("alex/ecs2", f.fingerprint)
         assert rec.status is FindingStatus.NEW and rec.attempts == 0
     assert w.gl.mrs == []
 

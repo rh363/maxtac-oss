@@ -94,3 +94,24 @@ def test_phase1_sections_defaults_and_validation(tmp_path):
     data["gitlab"]["url"] = "http://gitlab.example.it"
     with pytest.raises(ValidationError):
         load_config(write(tmp_path, data))
+
+
+def test_notifier_wiring(tmp_path):
+    from maxtac.adapters.notifier import NoopNotifier, WebhookNotifier
+    from maxtac.container import Container, MissingSecret
+
+    data = raw()
+    data["db_path"] = str(tmp_path / "db.sqlite3")
+    cfg = load_config(write(tmp_path, data))
+    c = Container.build(cfg)
+    c.secrets = Secrets()
+    assert isinstance(c.notifier(), NoopNotifier)
+    data["notify"] = {"webhook": True}
+    c.config = load_config(write(tmp_path, data))
+    with pytest.raises(MissingSecret, match="webhook"):
+        c.notifier()
+    (tmp_path / "s").mkdir()
+    (tmp_path / "s" / "notify_webhook_url").write_text("https://hooks.example.it/x\n")
+    c.secrets = Secrets(_secrets_dir=tmp_path / "s")
+    assert isinstance(c.notifier(), WebhookNotifier)
+    c.close()

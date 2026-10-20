@@ -18,6 +18,8 @@ from .models import (
     FindingStatus,
     Message,
     RepoConfig,
+    RunReport,
+    RunSummary,
     StructuredResult,
     ToolSpec,
 )
@@ -110,12 +112,15 @@ class LLMPort(Protocol):
 
 
 class FindingStore(Protocol):
-    def get(self, fingerprint: str) -> FindingRecord | None: ...
+    """Stato dei finding per repo: lo stesso fingerprint in due repo sono due finding."""
 
-    def observe(self, findings: Sequence[Finding], seen_at: datetime) -> None: ...
+    def get(self, project: str, fingerprint: str) -> FindingRecord | None: ...
+
+    def observe(self, project: str, findings: Sequence[Finding], seen_at: datetime) -> None: ...
 
     def set_status(
         self,
+        project: str,
         fingerprint: str,
         status: FindingStatus,
         reason: str = "",
@@ -124,11 +129,15 @@ class FindingStore(Protocol):
         branch: str | None = None,
     ) -> None: ...
 
-    def record_failed_attempt(self, fingerprint: str, reason: str) -> int: ...
+    def record_failed_attempt(self, project: str, fingerprint: str, reason: str) -> int: ...
 
     def last_hunted(self, project: str) -> datetime | None: ...
 
-    def mark_hunted(self, project: str, at: datetime) -> None: ...
+    def mark_hunted(self, project: str, at: datetime) -> None:
+        """`at` è l'inizio della run: tutti i repo di una notte condividono lo stesso istante."""
+        ...
+
+    def hunt_count(self, project: str) -> int: ...
 
     def counts_by_status(self) -> dict[str, int]: ...
 
@@ -141,3 +150,19 @@ class BudgetPort(Protocol):
     def spent(self, run_id: str, scope: str | None = None) -> float: ...
 
     def spent_month(self, year: int, month: int) -> float: ...
+
+
+class RunStore(Protocol):
+    """Storico delle run notturne: report completo in JSON, letto da `status` e dalla dashboard."""
+
+    def save_run(self, report: RunReport) -> None: ...
+
+    def recent_runs(self, limit: int) -> list[RunSummary]: ...
+
+    def get_run(self, run_id: str) -> dict[str, Any] | None: ...
+
+
+class NotifierPort(Protocol):
+    """Notifica del mattino. Il testo è sempre neutro: può finire in canali condivisi."""
+
+    def notify(self, report: RunReport) -> None: ...

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import IntEnum, StrEnum
 from pathlib import Path
 from typing import Any, Literal
@@ -89,6 +90,9 @@ class Task:
             rules = ", ".join(sorted({f.rule for f in self.findings}))
             return f"Aggiorna {self.key} ({rules})"
         f = self.findings[0]
+        if self.kind == "bug":  # la regola è un simbolo: il titolo del modello è più leggibile
+            what = f.detail.splitlines()[0][:100] if f.detail.strip() else f.rule
+            return f"Correggi {what} in {f.location}"
         return f"Correggi {f.rule} in {f.location}"
 
 
@@ -271,7 +275,22 @@ class RunReport:
     spent_usd: float = 0.0
     night_cap_usd: float = 0.0
     aborted: str | None = None  # motivo per cui la notte si è fermata prima (es. crediti finiti)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
 
     @property
     def mrs_opened(self) -> list[FixResult]:
         return [f for r in self.repos for f in r.fixes if f.outcome is Outcome.MR_OPENED]
+
+
+@dataclass(frozen=True)
+class RunSummary:
+    """Riga dello storico delle run (per `status` e per la dashboard)."""
+
+    run_id: str
+    started_at: datetime | None
+    finished_at: datetime | None
+    dry_run: bool
+    spent_usd: float
+    mrs_opened: int
+    aborted: str | None
