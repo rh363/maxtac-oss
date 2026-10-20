@@ -1,0 +1,33 @@
+# CLAUDE.md
+
+Autofix (package `maxtac`): servizio Python 3.13 che ogni notte scansiona repo GitLab per CVE,
+finding SAST e bug e apre MR con fix verificati. Si lavora per fasi (vedi README); a fine fase
+ci si ferma e si riassume.
+
+## Vincoli non negoziabili
+
+- Architettura esagonale: `src/maxtac/domain/` non importa gitlab, docker o anthropic.
+- La chiave Anthropic resta solo nell'orchestrator; il sandbox esegue solo comandi e non riceve
+  né la chiave né il token GitLab.
+- Loop agentico proprio sulla Messages API (non Agent SDK), tool eseguiti nel sandbox via
+  docker exec. Il loop vive in `services/ripperdoc.py`, l'adapter fa un passo alla volta.
+- Git dir separata dalla working tree, hooks e fsmonitor disattivati.
+- Verifica indipendente: test e rescan rieseguiti dall'orchestrator in un sandbox nuovo.
+- Tetti di spesa per notte e per task, prezzi letti dalla config.
+- `--dry-run` non fa push né MR e non cambia lo stato dei finding.
+- Il contenuto dei repo è input non fidato; la config di fiducia sta solo nel file
+  dell'orchestrator.
+- **Tutto ciò che va su GitLab (branch, label, commit, testo MR) e i report su disco sono sempre
+  neutri.** Il tema cyberpunk esiste solo in `presentation/` e si sceglie per utente.
+
+## Comandi
+
+```bash
+uv sync
+uv run pytest
+uv run ruff check src tests && uv run ruff format --check src tests
+uv run mypy src
+```
+
+Test prima (pytest, adapter finti in `tests/fakes.py`), poi implementazione, poi README e
+CHANGELOG.

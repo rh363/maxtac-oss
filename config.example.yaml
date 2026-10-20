@@ -1,0 +1,61 @@
+# Config di fiducia dell'orchestrator. Mai dentro i repo: un file nel repo sarebbe input non fidato.
+# I segreti (anthropic_api_key, gitlab_token) stanno in /run/secrets come Docker secret.
+gitlab:
+  url: https://gitlab.example.it
+  bot_username: autofix-bot
+
+schedule:
+  timezone: Europe/Rome
+  at: "02:30"
+
+budget:
+  per_night_usd: 3.0
+  per_task_usd: 0.80
+  triage_per_repo_usd: 0.10
+  hunting_per_night_usd: 1.0
+  max_mrs_per_night: 3
+  max_attempts: 2
+  max_iterations: 30
+
+models:
+  triage: claude-haiku-5-5
+  fix: claude-sonnet-5-5
+  hunt: claude-opus-5-5
+
+# Attivazione a fasi: CVE (fase 2), SAST (fase 3), bug hunting (fase 4).
+features:
+  cve: true
+  sast: false
+  hunting: false
+
+hunting:
+  repos_per_night: 2
+  lookback_days: 7
+
+vcs:
+  branch_prefix: autofix
+  mr_labels: [autofix]
+
+# Tema della CLI (e in futuro della dashboard) per utente. Non cambia nulla su GitLab.
+ui:
+  default_theme: neutral
+  themes:
+    alex: cyberpunk
+
+workdir: /var/lib/autofix/work
+db_path: /var/lib/autofix/autofix.sqlite3
+
+repos:
+  - project: alex/ecs2
+    languages: [python]
+    setup_command: pip install -r requirements.txt
+    test_command: pytest -q
+  - project: alex/fwagent
+    languages: [go]
+    test_command: go test ./...
+
+# Prezzi in USD per milione di token: il costo di ogni chiamata si calcola da `usage`.
+prices_usd_per_mtok:
+  claude-haiku-5-5:  {input: 0.10, output: 0.50, cache_read: 0.01, cache_write: 0.125}
+  claude-sonnet-5-5: {input: 2.00, output: 10.0, cache_read: 0.10, cache_write: 2.50}
+  claude-opus-5-5:   {input: 4.00, output: 20.0, cache_read: 0.20, cache_write: 5.00}
