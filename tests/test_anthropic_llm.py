@@ -107,10 +107,12 @@ def test_structured_unusable_stop_raises(stop):
 
 def test_structured_invalid_json_raises():
     rec = Recorder(ok([{"type": "text", "text": "non json"}]))
-    with pytest.raises(LLMResponseError):
+    with pytest.raises(LLMResponseError) as exc:
         make_llm(rec).structured(
             model="claude-haiku-5-5", system="S", prompt="P", tool=VERDICT_TOOL, max_tokens=10
         )
+    # la spesa c'è stata: l'eccezione porta l'usage da addebitare
+    assert exc.value.usage.input_tokens > 0 and exc.value.model
 
 
 def test_turn_round_trip_with_tools_cache_and_fallback():

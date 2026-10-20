@@ -12,6 +12,7 @@ import io
 import logging
 import posixpath
 import tarfile
+import threading
 import time
 import uuid
 from collections.abc import Iterator
@@ -30,6 +31,12 @@ HOME = "/home/sandbox"
 OUTPUT_LIMIT = 8_000_000  # byte di output tenuti per comando (testa e coda)
 READ_LIMIT = 2_000_000
 KILL_GRACE = 10
+# Watchdog: oltre timeout + grazia + margine il container viene ucciso. Serve quando un
+# processo in background (es. `setsid sleep inf &`) sfugge a `timeout` e tiene aperto stdout.
+WATCHDOG_SLACK = 30.0
+IO_TIMEOUT = 120.0  # read/write/list_files
+TIMEOUT_BIN = "/usr/bin/timeout"
+SH_BIN = "/bin/sh"
 
 
 @dataclass(frozen=True)
@@ -61,13 +68,22 @@ def _environment(spec: SandboxSpec) -> dict[str, str]:
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",
         "GOPATH": f"{HOME}/go",
         "GOCACHE": f"{HOME}/.cache/go-build",
-        "GOFLAGS": "-modcacherw",
+        "GOFLAGS": "-modcacherw -mod=mod",
         "GOTOOLCHAIN": "local",
+        # solo il proxy dei moduli: mai `direct` (git clone da host arbitrari)
+        "GOPROXY": "https://proxy.golang.org",
+        "GOSUMDB": "sum.golang.org",
+        "GONOSUMDB": "",
+        "GONOPROXY": "",
+        "GOPRIVATE": "",
+        "GOINSECURE": "",
         "npm_config_cache": f"{HOME}/.npm",
         "npm_config_update_notifier": "false",
         "SEMGREP_SEND_METRICS": "off",
-        "PATH": f"{HOME}/.local/bin:{HOME}/go/bin:/usr/local/go/bin:"
-        "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY": "/opt/osv-db",  # db offline nell'immagine
+        # directory di sistema (sola lettura) prima di quelle scrivibili dal codice del repo
+        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:"
+        f"/usr/local/go/bin:{HOME}/.local/bin:{HOME}/go/bin",
     }
 
 
@@ -122,10 +138,28 @@ class DockerSession:
         self._client = client
         self._container = container
         self._spec = spec
+        self.killed = False
+
+    def _kill(self) -> None:
+        self.killed = True
+        log.warning(
+            "watchdog: sandbox %s bloccato, lo termino", getattr(self._container, "id", "?")
+        )
+        try:
+            self._container.kill()
+        except Exception:
+            log.exception("kill del sandbox fallito")
 
     def _exec(
-        self, argv: list[str], *, stderr: bool = True, limit: int | None = None
+        self,
+        argv: list[str],
+        *,
+        stderr: bool = True,
+        limit: int | None = None,
+        deadline: float = IO_TIMEOUT,
     ) -> tuple[int, bytes, bool]:
+        if self.killed:
+            raise RuntimeError("sandbox terminato dal watchdog")
         limit = limit or OUTPUT_LIMIT
         api = self._client.api
         exec_id = api.exec_create(
@@ -137,8 +171,20 @@ class DockerSession:
             user=self._spec.user,
         )["Id"]
         head, tail, cut = bytearray(), bytearray(), False
-        for chunk in api.exec_start(exec_id, stream=True):
-            cut = _keep(head, chunk, tail, limit) or cut
+        timer = threading.Timer(deadline, self._kill)
+        timer.daemon = True
+        timer.start()
+        try:
+            for chunk in api.exec_start(exec_id, stream=True):
+                cut = _keep(head, chunk, tail, limit) or cut
+        except Exception:
+            if not self.killed:
+                raise
+        finally:
+            timer.cancel()
+        if self.killed:
+            msg = f"\n[watchdog: sandbox terminato dopo {deadline:.0f}s]".encode()
+            return 137, bytes(head) + bytes(tail) + msg, cut
         code = None
         for _ in range(50):  # l'exit code arriva poco dopo la fine dello stream
             code = api.exec_inspect(exec_id).get("ExitCode")
@@ -153,16 +199,18 @@ class DockerSession:
         return (code if code is not None else -1), data, cut
 
     def exec(self, cmd: str, timeout: int) -> ExecResult:
-        argv = ["timeout", f"--kill-after={KILL_GRACE}", str(int(timeout)), "sh", "-c", cmd]
-        code, out, _ = self._exec(argv)
+        argv = [TIMEOUT_BIN, f"--kill-after={KILL_GRACE}", str(int(timeout)), SH_BIN, "-c", cmd]
+        code, out, _ = self._exec(argv, deadline=timeout + KILL_GRACE + WATCHDOG_SLACK)
         text = out.decode("utf-8", errors="replace")
-        if code in (124, 137):
+        if self.killed:
+            pass  # il messaggio del watchdog è già nell'output
+        elif code in (124, 137):
             text += f"\n[timeout: comando interrotto dopo {timeout}s]"
         return ExecResult(code, text)
 
     def read(self, path: str) -> str:
         rel = safe_relpath(path)
-        argv = ["sh", "-c", 'test -f "$1" && head -c "$2" -- "$1"', "sh", rel, str(READ_LIMIT)]
+        argv = [SH_BIN, "-c", 'test -f "$1" && head -c "$2" -- "$1"', "sh", rel, str(READ_LIMIT)]
         code, out, _ = self._exec(argv, stderr=False, limit=READ_LIMIT + 1024)
         if code != 0:
             raise FileNotFoundError(rel)
@@ -174,7 +222,7 @@ class DockerSession:
             raise ValueError("path vuoto")
         parent, name = posixpath.split(rel)
         target = posixpath.join(WORKDIR, parent) if parent else WORKDIR
-        code, out, _ = self._exec(["mkdir", "-p", "--", target])
+        code, out, _ = self._exec(["/bin/mkdir", "-p", "--", target])
         if code != 0:
             raise OSError(out.decode("utf-8", errors="replace"))
         data = content.encode("utf-8")
@@ -196,7 +244,7 @@ class DockerSession:
             'find "$1" \\( -name .git -o -name node_modules -o -name .venv -o -name __pycache__ \\)'
             " -prune -o -type f -print | sed 's|^\\./||' | sort | head -n 5000"
         )
-        code, out, _ = self._exec(["sh", "-c", script, "sh", rel], stderr=False)
+        code, out, _ = self._exec([SH_BIN, "-c", script, "sh", rel], stderr=False)
         if code != 0:
             raise FileNotFoundError(rel)
         return [line for line in out.decode("utf-8", errors="replace").splitlines() if line]

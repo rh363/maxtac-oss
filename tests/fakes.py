@@ -55,11 +55,21 @@ class FakeGitLab:
     broken: set[str] = field(default_factory=set)  # checkout che esplode
 
 
+IGNORED_DIRS = (".venv/", "node_modules/", "__pycache__/")
+
+
+def ignored(path: str) -> bool:
+    """Come gli exclude di GitLabVCS: questi file non finiscono mai in stage."""
+    return any(path.startswith(d) or f"/{d}" in path for d in IGNORED_DIRS)
+
+
 class FakeVCS:
     def __init__(self, gitlab: FakeGitLab) -> None:
         self.gl = gitlab
         self.base: dict[Path, Files] = {}
         self.trees: dict[Path, Files] = {}
+        self.snapshots: dict[str, Files] = {}
+        self.cleaned: list[str] = []
         self._ids = itertools.count(1)
 
     def checkout(self, repo: RepoConfig, workdir: Path) -> Checkout:
@@ -79,11 +89,50 @@ class FakeVCS:
         self.reset(co)
 
     def changes(self, co: Checkout) -> list[FileChange]:
-        base, tree = self.base[co.worktree], self.trees[co.worktree]
+        base = self.base[co.worktree]
+        tree = {p: c for p, c in self.trees[co.worktree].items() if not ignored(p)}
         out = [FileChange(p, "added") for p in tree if p not in base]
         out += [FileChange(p, "modified") for p in tree if p in base and tree[p] != base[p]]
         out += [FileChange(p, "deleted") for p in base if p not in tree]
         return sorted(out, key=lambda c: c.path)
+
+    def discard_untracked(self, co: Checkout) -> None:
+        tree = self.trees[co.worktree]
+        for p in [p for p in tree if ignored(p)]:
+            del tree[p]
+
+    def snapshot(self, co: Checkout) -> str:
+        files = {p: c for p, c in self.trees[co.worktree].items() if not ignored(p)}
+        sid = "tree:" + repr(sorted(files.items()))  # come git: stesso contenuto, stesso id
+        self.snapshots[sid] = files
+        return sid
+
+    def materialize(
+        self,
+        co: Checkout,
+        tree: str,
+        *,
+        include: Sequence[str] | None = None,
+        exclude: Sequence[str] = (),
+    ) -> None:
+        snap = self.snapshots[tree]
+        target = self.trees[co.worktree]
+        target.clear()
+        if include is not None:
+            target.update(self.base[co.worktree])
+            target.update({p: snap[p] for p in include})
+        else:
+            target.update(snap)
+        for p in exclude:
+            target.pop(p, None)
+
+    def file_versions(self, co: Checkout, path: str) -> tuple[str | None, str | None]:
+        return self.base[co.worktree].get(path), self.trees[co.worktree].get(path)
+
+    def cleanup(self, co: Checkout) -> None:
+        self.cleaned.append(co.repo.project)
+        self.trees.pop(co.worktree, None)
+        self.base.pop(co.worktree, None)
 
     def diff(self, co: Checkout) -> str:
         return "\n".join(f"{c.status} {c.path}" for c in self.changes(co))

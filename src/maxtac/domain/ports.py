@@ -24,6 +24,7 @@ from .models import (
     RunSummary,
     StructuredResult,
     ToolSpec,
+    Usage,
 )
 
 
@@ -32,6 +33,16 @@ class LLMUnavailable(Exception):
 
     Non è colpa del finding: la pipeline si ferma senza contare tentativi.
     """
+
+
+class StructuredOutputError(Exception):
+    """Risposta strutturata inutilizzabile (max_tokens, JSON non valido): la spesa però c'è
+    stata, quindi l'eccezione porta con sé `usage` e `model` per addebitarla."""
+
+    def __init__(self, message: str, usage: Usage, model: str) -> None:
+        super().__init__(message)
+        self.usage = usage
+        self.model = model
 
 
 class VCSPort(Protocol):
@@ -46,6 +57,35 @@ class VCSPort(Protocol):
         ...
 
     def changes(self, co: Checkout) -> list[FileChange]: ...
+
+    def discard_untracked(self, co: Checkout) -> None:
+        """Elimina i file non tracciati né in stage (venv, node_modules, pyc creati
+        dall'agente): non finirebbero nella MR, ma potrebbero truccare la verifica."""
+        ...
+
+    def snapshot(self, co: Checkout) -> str:
+        """Fotografa la working tree come tree git (fuori dal sandbox); ritorna l'id."""
+        ...
+
+    def materialize(
+        self,
+        co: Checkout,
+        tree: str,
+        *,
+        include: Sequence[str] | None = None,
+        exclude: Sequence[str] = (),
+    ) -> None:
+        """Riporta la working tree a `tree`. Con `include`: base + solo quei path da `tree`.
+        Con `exclude`: `tree` senza quei path."""
+        ...
+
+    def file_versions(self, co: Checkout, path: str) -> tuple[str | None, str | None]:
+        """Contenuto di `path` al commit base e nella working tree (None se assente)."""
+        ...
+
+    def cleanup(self, co: Checkout) -> None:
+        """Elimina working tree e git dir del checkout."""
+        ...
 
     def diff(self, co: Checkout) -> str: ...
 

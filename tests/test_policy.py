@@ -116,7 +116,7 @@ def test_hunting_rotation_never_hunted_first_then_oldest():
     ],
 )
 def test_protected_changes(path, status, protected):
-    assert bool(protected_changes([FileChange(path, status)])) is protected
+    assert bool(protected_changes([FileChange(path, status)], "bug")) is protected
 
 
 def test_adds_test():

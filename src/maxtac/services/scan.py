@@ -59,4 +59,10 @@ class ScanService:
         except Exception as e:
             log.exception("scan di %s fallito", repo.project)
             res.errors.append(f"{type(e).__name__}: {e}")
+        finally:
+            if res.checkout is not None:
+                try:
+                    self.vcs.cleanup(res.checkout)
+                except Exception:
+                    log.exception("pulizia del checkout di %s fallita", repo.project)
         return res

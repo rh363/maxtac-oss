@@ -12,6 +12,7 @@ Il contenuto del repo non è fidato: git non deve mai eseguire nulla che venga d
 from __future__ import annotations
 
 import base64
+import contextlib
 import logging
 import os
 import shutil
@@ -47,6 +48,7 @@ node_modules/
 """
 
 STATUS = {"A": "added", "M": "modified", "T": "modified", "D": "deleted"}
+MODES = {"120000": "symlink", "160000": "gitlink"}
 
 
 class GitError(RuntimeError):
@@ -72,6 +74,16 @@ def _hardening(allow_file_protocol: bool) -> list[str]:
     for k, v in flags.items():
         out += ["-c", f"{k}={v}"]
     return out
+
+
+def _drop_dotgit(worktree: Path) -> None:
+    """Un `.git` (file o directory) nella working tree farebbe leggere a git una config
+    scritta dal repo o dall'agente: si elimina sempre prima di ogni comando."""
+    p = worktree / ".git"
+    if p.is_dir() and not p.is_symlink():
+        shutil.rmtree(p)
+    else:
+        p.unlink(missing_ok=True)
 
 
 class Git:
@@ -133,6 +145,7 @@ class Git:
             cmd,
             capture_output=True,
             text=True,
+            errors="replace",
             env=self.env(),
             input=input,
             cwd=self.worktree or self.gitdir or None,
@@ -257,7 +270,7 @@ class GitLabVCS:
             str(worktree),
         )
         # Il file `.git` nella working tree punterebbe alla git dir: via.
-        (worktree / ".git").unlink(missing_ok=True)
+        _drop_dotgit(worktree)
         (gitdir / "info").mkdir(exist_ok=True)
         (gitdir / "info" / "autofix-exclude").write_text(EXCLUDES, encoding="utf-8")
         co = Checkout(repo, worktree, gitdir, base, "")
@@ -271,7 +284,7 @@ class GitLabVCS:
         git("checkout", "--force", "--detach", co.base_sha)
         git("reset", "--hard", co.base_sha)
         git("clean", "-ffdx")
-        (co.worktree / ".git").unlink(missing_ok=True)
+        _drop_dotgit(co.worktree)
 
     def start_branch(self, co: Checkout, branch: str) -> None:
         self.reset(co)
@@ -279,19 +292,66 @@ class GitLabVCS:
 
     def _stage(self, co: Checkout) -> Git:
         git = self._git(co)
-        (co.worktree / ".git").unlink(missing_ok=True)  # se l'agente ne ha creato uno
+        _drop_dotgit(co.worktree)  # se l'agente ne ha creato uno (file o directory)
         git("add", "--all", "--", ".")
         return git
 
     def changes(self, co: Checkout) -> list[FileChange]:
-        out = self._stage(co)(
-            "diff", "--cached", "--name-status", "--no-renames", "-z", co.base_sha
-        )
+        out = self._stage(co)("diff", "--cached", "--raw", "--no-renames", "-z", co.base_sha)
         parts = [p for p in out.split("\0") if p]
-        return [
-            FileChange(path, STATUS.get(code[:1], "modified"))  # type: ignore[arg-type]
-            for code, path in zip(parts[::2], parts[1::2], strict=True)
-        ]
+        changes = []
+        for meta, path in zip(parts[::2], parts[1::2], strict=True):
+            # ":<modo vecchio> <modo nuovo> <sha> <sha> <stato>"
+            old_mode, new_mode, *_, code = meta.lstrip(":").split()
+            mode = new_mode if code[:1] != "D" else old_mode
+            changes.append(
+                FileChange(
+                    path,
+                    STATUS.get(code[:1], "modified"),  # type: ignore[arg-type]
+                    MODES.get(mode, "file"),  # type: ignore[arg-type]
+                )
+            )
+        return changes
+
+    def discard_untracked(self, co: Checkout) -> None:
+        # Prima si mette in stage il lavoro dell'agente, poi `clean -x` toglie il resto:
+        # file ignorati (venv, node_modules, pyc) e qualunque cosa fuori dall'indice.
+        self._stage(co)("clean", "-ffdx")
+
+    def snapshot(self, co: Checkout) -> str:
+        return self._stage(co)("write-tree").strip()
+
+    def materialize(
+        self,
+        co: Checkout,
+        tree: str,
+        *,
+        include: Sequence[str] | None = None,
+        exclude: Sequence[str] = (),
+    ) -> None:
+        if include is not None:
+            self.reset(co)
+            if include:
+                self._git(co)("checkout", tree, "--", *include)
+        else:
+            git = self._stage(co)  # indice = working tree, così read-tree toglie il superfluo
+            git("read-tree", "--reset", "-u", tree)
+            git("clean", "-ffdx")
+        if exclude:
+            self._git(co)("rm", "-q", "-f", "--ignore-unmatch", "--", *exclude)
+        _drop_dotgit(co.worktree)
+
+    def file_versions(self, co: Checkout, path: str) -> tuple[str | None, str | None]:
+        git = self._stage(co)
+        old = git("cat-file", "blob", f"{co.base_sha}:{path}", check=False) or None
+        new = git("cat-file", "blob", f":{path}", check=False) or None
+        return old, new
+
+    def cleanup(self, co: Checkout) -> None:
+        for d in (co.worktree, co.gitdir):
+            shutil.rmtree(d, ignore_errors=True)
+        with contextlib.suppress(OSError):  # la directory del repo, se ormai vuota
+            co.worktree.parent.rmdir()
 
     def diff(self, co: Checkout) -> str:
         return self._stage(co)("diff", "--cached", "--no-ext-diff", "--no-textconv", co.base_sha)

@@ -20,7 +20,7 @@ from maxtac.domain.models import (
     Usage,
     UserText,
 )
-from maxtac.domain.ports import LLMUnavailable
+from maxtac.domain.ports import LLMUnavailable, StructuredOutputError
 
 log = logging.getLogger(__name__)
 
@@ -39,8 +39,9 @@ _STOP: dict[str, StopReason] = {
 }
 
 
-class LLMResponseError(RuntimeError):
-    """Risposta inutilizzabile per questa chiamata (rifiuto, JSON troncato o non valido)."""
+class LLMResponseError(StructuredOutputError):
+    """Risposta inutilizzabile per questa chiamata (rifiuto, JSON troncato o non valido).
+    Porta `usage` e `model`: i token sono stati spesi e vanno addebitati comunque."""
 
 
 def strict_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
@@ -112,16 +113,19 @@ class AnthropicLLM:
         }
         resp = self._create(params)
         stop = getattr(resp, "stop_reason", None)
+        usage, served = _usage(resp), str(resp.model)
         if stop in ("refusal", "max_tokens"):
-            raise LLMResponseError(f"risposta strutturata non valida: stop_reason={stop}")
+            raise LLMResponseError(
+                f"risposta strutturata non valida: stop_reason={stop}", usage, served
+            )
         text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
         try:
             data = json.loads(text)
         except json.JSONDecodeError as e:
-            raise LLMResponseError(f"JSON non valido dal modello: {e}") from e
+            raise LLMResponseError(f"JSON non valido dal modello: {e}", usage, served) from e
         if not isinstance(data, dict):
-            raise LLMResponseError("il modello non ha restituito un oggetto JSON")
-        return StructuredResult(data, _usage(resp), str(resp.model))
+            raise LLMResponseError("il modello non ha restituito un oggetto JSON", usage, served)
+        return StructuredResult(data, usage, served)
 
     def turn(
         self,

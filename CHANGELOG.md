@@ -66,6 +66,30 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
   porta solo su loopback dietro reverse proxy.
 - Il report di ogni fix conserva motivo del triage e output dei test della verifica.
 
+### Security
+
+- Descrizione, titolo e commit delle MR: campi non fidati sanificati (niente a capo, `|`,
+  backtick, menzioni), testo del modello e output dei test in blocchi di codice, nessuna riga
+  che inizi con `/` (quick action GitLab).
+- Report e webhook: testo non fidato con HTML, markup di Slack e menzioni neutralizzati.
+- File protetti: per CVE e SAST nessun test toccabile, nemmeno aggiunto; config di CI, test
+  runner e scanner protetta ovunque nel repo; `pyproject.toml` e `package.json` ammessi per le
+  CVE solo se non cambiano le sezioni di test e scanner; symlink e gitlink a un umano.
+- Bug: la suite senza i test aggiunti deve passare sul fix; euristica sui test di regressione
+  che escono dal processo.
+- Scanner senza soppressioni inline (`--disable-nosem`, `--ignore-nosec`, `-nosec`), osv con
+  config vuota e database offline, semgrep con ruleset locali; binari per path assoluto.
+- Rescan in un sandbox nuovo senza setup né test, sulla fotografia git del fix; `git clean
+  -ffdx` dopo l'agente; snapshot e ripristino come tree git invece che via sandbox.
+- `PATH` del sandbox con le directory di sistema prima di quelle scrivibili; `GOPROXY` senza
+  `direct`; watchdog che uccide il container bloccato oltre timeout + margine.
+- Proxy: allowlist ridotta ai registry (niente GitHub, semgrep.dev, api.osv.dev), solo CONNECT.
+- `.git` directory nella working tree eliminata; checkout eliminato a fine repo.
+- Spesa addebitata anche per le risposte strutturate inutilizzabili; run non avviata a crediti
+  del mese esauriti e tetto della notte ridotto ai crediti rimasti.
+- Scanner Python installati con hash (`scripts/lock-sandbox-tools.sh`) e script per pinnare i
+  digest delle immagini (`scripts/pin-digests.sh`).
+
 ### Changed
 
 - Il db SQLite usa il journal `DELETE` invece di WAL, così la dashboard può leggerlo da un

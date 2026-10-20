@@ -17,6 +17,14 @@ from maxtac.domain.ports import Sandbox
 
 OUT_DIR = "/tmp/autofix-scan"
 WORK = "/work"
+# Binari per path assoluto: la working tree e la home sono scrivibili dal codice del repo,
+# un `semgrep` o un `cat` finto messo lì non deve mai prendere il posto di quello vero.
+BIN = "/usr/local/bin"
+SH = {"mkdir": "/bin/mkdir", "rm": "/bin/rm", "cat": "/bin/cat", "touch": "/usr/bin/touch"}
+# Ruleset semgrep scaricati al build dell'immagine (sandbox/Dockerfile): niente rete a runtime.
+SEMGREP_RULES_DIR = "/opt/semgrep-rules"
+# Config vuota per osv-scanner: mai quella del repo (potrebbe ignorare le vulnerabilità).
+OSV_EMPTY_CONFIG = f"{OUT_DIR}/osv-scanner-empty.toml"
 # Directory di dipendenze installate dal setup: non sono codice del repo.
 EXCLUDED_DIRS = frozenset({"node_modules", ".venv", "venv", ".tox", ".nox", "site-packages"})
 DETAIL_LIMIT = 4000
@@ -78,12 +86,13 @@ class _JsonScanner:
 
     def scan(self, sandbox: Sandbox) -> list[Finding]:
         out = f"{OUT_DIR}/{self.name}.json"
-        r = sandbox.exec(f"mkdir -p {OUT_DIR} && rm -f {out} && {self._command(out)}", self.timeout)
+        prepare = f"{SH['mkdir']} -p {OUT_DIR} && {SH['rm']} -f {out}"
+        r = sandbox.exec(f"{prepare} && {self._command(out)}", self.timeout)
         if r.code in self.empty_codes:
             return []
         if r.code not in self.ok_codes:
             raise ScannerError(f"{self.name} exit={r.code}: {r.output[-2000:]}")
-        raw = sandbox.exec(f"cat {out}", timeout=120)
+        raw = sandbox.exec(f"{SH['cat']} {out}", timeout=120)
         if not raw.ok:
             raise ScannerError(f"{self.name}: output JSON mancante")
         try:
@@ -107,7 +116,13 @@ class OsvScanner(_JsonScanner):
         return bool(languages)
 
     def _command(self, out: str) -> str:
-        return f"osv-scanner scan source --recursive --format json --output {out} {WORK}"
+        # Database offline nell'immagine (ricostruita ogni settimana) e config vuota esplicita.
+        return (
+            f"{SH['rm']} -f {OSV_EMPTY_CONFIG} && {SH['touch']} {OSV_EMPTY_CONFIG} && "
+            f"{BIN}/osv-scanner scan source --recursive "
+            f"--offline-vulnerabilities --config {OSV_EMPTY_CONFIG} "
+            f"--format json --output {out} {WORK}"
+        )
 
     def parse(self, data: dict[str, Any]) -> list[Finding]:
         findings: list[Finding] = []
@@ -179,11 +194,12 @@ class Semgrep(_JsonScanner):
         return bool(languages)
 
     def _command(self, out: str) -> str:
-        configs = " ".join(f"--config {shlex.quote(r)}" for r in self.rulesets)
+        configs = " ".join(f"--config {shlex.quote(semgrep_rules_file(r))}" for r in self.rulesets)
         excludes = " ".join(f"--exclude {d}" for d in sorted(EXCLUDED_DIRS))
+        # --disable-nosem: un `# nosemgrep` aggiunto dall'agente non fa sparire il finding
         return (
-            f"cd {WORK} && semgrep scan --metrics=off --disable-version-check --quiet "
-            f"--json --output {out} {excludes} {configs} ."
+            f"cd {WORK} && {BIN}/semgrep scan --metrics=off --disable-version-check --quiet "
+            f"--disable-nosem --json --output {out} {excludes} {configs} ."
         )
 
     def parse(self, data: dict[str, Any]) -> list[Finding]:
@@ -220,7 +236,10 @@ class Bandit(_JsonScanner):
 
     def _command(self, out: str) -> str:
         skip = ",".join(f"*/{d}/*" for d in [*sorted(EXCLUDED_DIRS), "tests", "test"])
-        return f"cd {WORK} && bandit -r . -f json -o {out} -q -x {shlex.quote(skip)}"
+        return (
+            f"cd {WORK} && {BIN}/bandit -r . -f json -o {out} -q --ignore-nosec "
+            f"-x {shlex.quote(skip)}"
+        )
 
     def parse(self, data: dict[str, Any]) -> list[Finding]:
         out = []
@@ -255,7 +274,7 @@ class Gosec(_JsonScanner):
 
     def _command(self, out: str) -> str:
         return (
-            f"cd {WORK} && gosec -quiet -no-fail -fmt=json -out={out} "
+            f"cd {WORK} && {BIN}/gosec -quiet -no-fail -nosec -fmt=json -out={out} "
             "-exclude-dir=vendor -exclude-dir=testdata ./..."
         )
 
@@ -263,7 +282,7 @@ class Gosec(_JsonScanner):
         out = []
         for r in data.get("Issues") or []:
             path = rel(str(r.get("file", "")))
-            if not path or excluded(path) or r.get("nosec"):
+            if not path or excluded(path):
                 continue
             cwe = (r.get("cwe") or {}).get("id")
             detail = f"{r.get('details', '')}\nCWE-{cwe}" if cwe else str(r.get("details", ""))
@@ -279,6 +298,14 @@ class Gosec(_JsonScanner):
                 )
             )
         return out
+
+
+def semgrep_rules_file(ruleset: str) -> str:
+    """`p/default` -> `/opt/semgrep-rules/p-default.yml`; un path assoluto resta com'è."""
+    if ruleset.startswith("/"):
+        return ruleset
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", ruleset).strip("-")
+    return f"{SEMGREP_RULES_DIR}/{slug}.yml"
 
 
 def build_scanners(semgrep_rulesets: Sequence[str]) -> list[_JsonScanner]:

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from maxtac.domain.budget import Meter
 from maxtac.domain.models import Finding, RepoConfig, Severity, ToolSpec
 from maxtac.domain.policy import safe_relpath, truncate
-from maxtac.domain.ports import LLMPort, Sandbox
+from maxtac.domain.ports import LLMPort, Sandbox, StructuredOutputError
 
 SYSTEM = """\
 You review recent changes of a repository looking for real bugs: logic errors,
@@ -103,13 +103,17 @@ class Hunter:
             f"Repository: {repo.project} (languages: {', '.join(repo.languages)})\n"
             f"<diff>\n{truncate(diff, DIFF_LIMIT)}\n</diff>\n" + "\n".join(parts)
         )
-        res = self.llm.structured(
-            model=self.model,
-            system=SYSTEM,
-            prompt=prompt,
-            tool=BUGS_TOOL,
-            max_tokens=self.max_tokens,
-        )
+        try:
+            res = self.llm.structured(
+                model=self.model,
+                system=SYSTEM,
+                prompt=prompt,
+                tool=BUGS_TOOL,
+                max_tokens=self.max_tokens,
+            )
+        except StructuredOutputError as e:
+            meter.charge(e.model, e.usage)  # risposta inutilizzabile, token spesi comunque
+            raise
         meter.charge(res.model, res.usage)
 
         out: list[Finding] = []

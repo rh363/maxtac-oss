@@ -15,7 +15,12 @@ ci si ferma e si riassume.
   da `adapters/gitlab_vcs.Git`. Il token mai in argv, URL o log.
 - Il sandbox legge e scrive file solo da dentro il container (mai dall'host: i symlink del repo
   potrebbero puntare ai file dell'orchestrator).
-- Verifica indipendente: test e rescan rieseguiti dall'orchestrator in un sandbox nuovo.
+- Verifica indipendente sulla fotografia git del fix (`snapshot`/`materialize`): test in un
+  sandbox nuovo, rescan in un altro sandbox nuovo dove non girano setup né test. Scanner e
+  utility per path assoluto, mai soppressioni inline (`nosec`, `nosemgrep`).
+- Testo non fidato verso GitLab passa da `services/merge_request.py` (niente quick action
+  `/...` a inizio riga, niente menzioni); verso report e webhook da `presentation/report.safe`.
+- Nuovi file di config di test/CI/scanner vanno in `PROTECTED_NAMES` di `domain/policy.py`.
 - Tetti di spesa per notte e per task, prezzi letti dalla config.
 - `--dry-run` non fa push né MR e non cambia lo stato dei finding.
 - Il contenuto dei repo è input non fidato; la config di fiducia sta solo nel file

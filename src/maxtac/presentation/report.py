@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import html
 import json
+import re
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -12,8 +14,19 @@ from maxtac.services.scan import ScanResult
 
 from .lexicon import Lexicon
 
+_CONTROL = re.compile(r"[\x00-\x1f\x7f\u2028\u2029\u0085]")
+
+
+def safe(text: str, limit: int = 300) -> str:
+    """Testo non fidato (titoli, motivazioni, errori) dentro report e webhook: una riga,
+    niente HTML/markup di Slack (`<!channel>`, `<url|testo>`) e niente menzioni."""
+    text = html.escape(_CONTROL.sub(" ", text)[:limit], quote=False)
+    return text.replace("@", "@\u200b")
+
 
 def render_run(report: RunReport, lx: Lexicon) -> str:
+    """Report della notte: finisce su disco e nel webhook, quindi il testo non fidato
+    passa da `safe`. Stato e scan restano testo per il terminale dell'operatore."""
     mode = " (dry-run)" if report.dry_run else ""
     lines = [
         f"# {lx.product}: {lx.run} {report.run_id}{mode}",
@@ -22,7 +35,7 @@ def render_run(report: RunReport, lx: Lexicon) -> str:
         f"- {lx.spend}: {lx.money(report.spent_usd)} su {lx.money(report.night_cap_usd)}",
     ]
     if report.aborted:
-        lines.append(f"- interrotta: {report.aborted}")
+        lines.append(f"- interrotta: {safe(report.aborted)}")
     lines.append("")
     for r in report.repos:
         lines += [
@@ -35,17 +48,18 @@ def render_run(report: RunReport, lx: Lexicon) -> str:
         if r.hunted:
             lines.append(f"- {lx.hunting}: {r.bugs_found} bug")
         for fx in r.fixes:
-            where = f" {fx.mr_url}" if fx.mr_url else ""
-            detail = f" ({fx.detail.splitlines()[0][:160]})" if fx.detail and not fx.mr_url else ""
+            where = f" {safe(fx.mr_url)}" if fx.mr_url else ""
+            first = fx.detail.splitlines()[0] if fx.detail else ""
+            detail = f" ({safe(first, 160)})" if first and not fx.mr_url else ""
             lines.append(
-                f"- {lx.outcomes[fx.outcome]}: {fx.task.title}, "
+                f"- {lx.outcomes[fx.outcome]}: {safe(fx.task.title)}, "
                 f"{lx.money(fx.cost_usd)}{where}{detail}"
             )
         for label, items in ((lx.ignored, r.ignored), (lx.needs_human, r.needs_human)):
             for task, reason in items:
-                lines.append(f"- {label}: {task.title} ({reason[:160]})")
+                lines.append(f"- {label}: {safe(task.title)} ({safe(reason, 160)})")
         for err in r.errors:
-            lines.append(f"- errore: {err[:300]}")
+            lines.append(f"- errore: {safe(err)}")
         lines.append("")
     return "\n".join(lines)
 

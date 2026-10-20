@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 
 from maxtac.adapters.gitlab_vcs import GitLabVCS
+from maxtac.adapters.scanners import BIN as SANDBOX_BIN
 from maxtac.adapters.scanners import OUT_DIR, WORK, Bandit
 from maxtac.adapters.sqlite_store import SqliteBudget, SqliteStore, connect
 from maxtac.domain.models import ExecResult, FindingStatus, Outcome, RepoConfig, ToolSpec
@@ -62,6 +63,8 @@ class MappedSandbox(LocalSandbox):
 
     def exec(self, cmd: str, timeout: int) -> ExecResult:
         mapped = cmd.replace(OUT_DIR, str(self.scratch)).replace(WORK, str(self.root))
+        # gli scanner sono invocati per path assoluto: qui stanno nel venv dei test
+        mapped = mapped.replace(f"{SANDBOX_BIN}/", f"{BIN}/")
         return super().exec(f'export PATH="{BIN}:$PATH"; {mapped}', timeout)
 
 

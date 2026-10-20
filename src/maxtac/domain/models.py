@@ -182,6 +182,8 @@ class Checkout:
 class FileChange:
     path: str
     status: Literal["added", "modified", "deleted", "renamed"]
+    # symlink e gitlink (submodule) non sono mai il risultato normale di un fix
+    kind: Literal["file", "symlink", "gitlink"] = "file"
 
 
 @dataclass(frozen=True)

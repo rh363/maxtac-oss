@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from maxtac.domain.budget import Meter
 from maxtac.domain.models import Decision, RepoConfig, Task, ToolSpec, Verdict
 from maxtac.domain.policy import truncate
-from maxtac.domain.ports import LLMPort
+from maxtac.domain.ports import LLMPort, StructuredOutputError
 
 SYSTEM = """\
 You triage security findings for an automated fixing service.
@@ -79,13 +79,17 @@ class Triage:
             f"Repository: {repo.project} (languages: {', '.join(repo.languages)})\n"
             "<findings>\n" + json.dumps(payload, indent=1) + "\n</findings>"
         )
-        res = self.llm.structured(
-            model=self.model,
-            system=SYSTEM,
-            prompt=prompt,
-            tool=VERDICT_TOOL,
-            max_tokens=self.max_tokens,
-        )
+        try:
+            res = self.llm.structured(
+                model=self.model,
+                system=SYSTEM,
+                prompt=prompt,
+                tool=VERDICT_TOOL,
+                max_tokens=self.max_tokens,
+            )
+        except StructuredOutputError as e:
+            meter.charge(e.model, e.usage)  # risposta inutilizzabile, token spesi comunque
+            raise
         meter.charge(res.model, res.usage)
 
         known = {t.fingerprint for t in tasks}

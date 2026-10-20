@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import shlex
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -34,6 +33,7 @@ from maxtac.domain.policy import (
     pick_hunting_repos,
     protected_changes,
     select_actionable,
+    suspicious_test_content,
     truncate,
 )
 from maxtac.domain.ports import (
@@ -70,6 +70,7 @@ class Limits:
     max_mrs_per_night: int = 3
     max_attempts: int = 2
     max_iterations: int = 30
+    monthly_credits_usd: float | None = None  # crediti API del mese: oltre non si spende
 
 
 @dataclass(frozen=True)
@@ -129,14 +130,20 @@ class Pipeline:
 
     def run_night(self, repos: Sequence[RepoConfig], run_id: str | None = None) -> RunReport:
         s = self.settings
-        run_id = run_id or self.clock().strftime("%Y%m%dT%H%M%SZ")
+        now = self.clock()
+        run_id = run_id or now.strftime("%Y%m%dT%H%M%SZ")
+        cap, credits_left = s.limits.per_night_usd, None
+        if s.limits.monthly_credits_usd is not None:
+            credits_left = s.limits.monthly_credits_usd - self.budget.spent_month(
+                now.year, now.month
+            )
+            cap = max(0.0, min(cap, credits_left))
         night = _Night(
-            NightBudget(self.budget, self.pricing, run_id, s.limits.per_night_usd, self.clock),
-            started_at=self.clock(),
+            NightBudget(self.budget, self.pricing, run_id, cap, self.clock), started_at=now
         )
-        report = RunReport(
-            run_id, s.dry_run, night_cap_usd=s.limits.per_night_usd, started_at=night.started_at
-        )
+        report = RunReport(run_id, s.dry_run, night_cap_usd=cap, started_at=night.started_at)
+        if credits_left is not None and credits_left <= 0:
+            report.aborted = "crediti del mese esauriti"
         hunt = set()
         if "bug" in s.enabled_kinds:
             picked = pick_hunting_repos(
@@ -181,6 +188,18 @@ class Pipeline:
     def _run_repo(self, repo: RepoConfig, night: _Night, rr: RepoReport, *, hunt: bool) -> None:
         workdir = self.settings.workdir / night.budget.run_id / repo.slug
         co = self.vcs.checkout(repo, workdir)
+        try:
+            self._process_repo(co, repo, night, rr, hunt=hunt)
+        finally:
+            # la working tree non serve più: i diff stanno nel report (disco limitato)
+            try:
+                self.vcs.cleanup(co)
+            except Exception:
+                log.exception("pulizia del checkout di %s fallita", repo.project)
+
+    def _process_repo(
+        self, co: Checkout, repo: RepoConfig, night: _Night, rr: RepoReport, *, hunt: bool
+    ) -> None:
         scanners = applicable(self.scanners, self.settings.enabled_kinds, repo.languages)
         with self.sandboxes.open(co.worktree) as sb:
             findings = run_scanners(sb, scanners, rr.errors)
@@ -310,9 +329,14 @@ class Pipeline:
                 )
 
             changes = self.vcs.changes(co)
+            # venv, node_modules, pyc scritti dall'agente: non sono nella MR e non devono
+            # poter truccare la verifica
+            self.vcs.discard_untracked(co)
             if not changes:
                 return self._failed(repo, task, Outcome.AGENT_FAILED, meter, "diff vuoto")
-            protected = protected_changes(changes)
+            protected = protected_changes(
+                changes, task.kind, lambda path: self.vcs.file_versions(co, path)
+            )
             if protected:
                 reason = "il fix tocca test o CI esistenti: " + ", ".join(protected)
                 for f in task.findings:
@@ -320,16 +344,23 @@ class Pipeline:
                 return FixResult(
                     task, Outcome.NEEDS_HUMAN, meter.spent, reason, branch, diff=self.vcs.diff(co)
                 )
-            if task.kind == "bug" and not adds_test(changes):
-                return self._failed(
-                    repo, task, Outcome.VERIFY_FAILED, meter, "manca il test di regressione"
-                )
+            if task.kind == "bug":
+                if not adds_test(changes):
+                    return self._failed(
+                        repo, task, Outcome.VERIFY_FAILED, meter, "manca il test di regressione"
+                    )
+                suspicious = self._suspicious_tests(co, changes)
+                if suspicious:
+                    return self._failed(repo, task, Outcome.VERIFY_FAILED, meter, suspicious)
 
-            ok, verify_log = self._verify(co, repo, task, scanners, changes, baseline)
+            # Da qui in poi si lavora sulla fotografia del fix: test e scanner non possono
+            # cambiare ciò che finisce nella MR.
+            tree = self.vcs.snapshot(co)
+            ok, verify_log = self._verify(co, repo, task, scanners, changes, baseline, tree)
             if not ok:
                 return self._failed(repo, task, Outcome.VERIFY_FAILED, meter, verify_log)
             if task.kind == "bug":
-                ok, why = self._regression_fails_on_base(co, repo, changes)
+                ok, why = self._bug_checks(co, repo, changes, tree)
                 if not ok:
                     return self._failed(repo, task, Outcome.VERIFY_FAILED, meter, why)
 
@@ -381,6 +412,13 @@ class Pipeline:
         if not r.ok:
             raise SetupFailed(f"setup fallito (exit={r.code}): {truncate(r.output, 2000)}")
 
+    def _run_tests(self, co: Checkout, repo: RepoConfig) -> tuple[bool, int, str]:
+        """Setup e test in un sandbox nuovo."""
+        with self.sandboxes.open(co.worktree) as sb:
+            self._setup(repo, sb)
+            r = sb.exec(repo.test_command, timeout=TEST_TIMEOUT)
+        return r.ok, r.code, truncate(r.output, 8000)
+
     def _verify(
         self,
         co: Checkout,
@@ -389,20 +427,25 @@ class Pipeline:
         scanners: Sequence[ScannerPort],
         changes: Sequence[FileChange],
         baseline: frozenset[str],
+        tree: str,
     ) -> tuple[bool, str]:
-        """Verifica indipendente in un sandbox nuovo: test verdi, finding spariti e nessun
-        finding nuovo dello stesso scanner. Si rilanciano solo gli scanner del task."""
+        """Verifica indipendente: test verdi, finding spariti e nessun finding nuovo dello
+        stesso scanner. Si rilanciano solo gli scanner del task.
+
+        Test e rescan stanno in due sandbox diversi: setup e test eseguono codice del repo,
+        che potrebbe lasciare scanner finti nella home o file nella working tree. Prima del
+        rescan la working tree torna esattamente alla fotografia del fix.
+        """
+        ok, code, out = self._run_tests(co, repo)
+        self.vcs.materialize(co, tree)
+        if not ok:
+            return False, f"test rossi (exit={code}):\n{out}"
+        if task.kind == "bug":
+            return True, out
         by_name = {sc.name: sc for sc in scanners}
         touched = {c.path for c in changes}
-        with self.sandboxes.open(co.worktree) as sb:
-            self._setup(repo, sb)
-            tests = sb.exec(repo.test_command, timeout=TEST_TIMEOUT)
-            out = truncate(tests.output, 8000)
-            if not tests.ok:
-                return False, f"test rossi (exit={tests.code}):\n{out}"
-            if task.kind == "bug":
-                return True, out
-            wanted = {f.fingerprint for f in task.findings}
+        wanted = {f.fingerprint for f in task.findings}
+        with self.sandboxes.open(co.worktree) as sb:  # pulito: niente setup né test
             for tool in sorted(task.tools):
                 sc = by_name.get(tool)
                 if sc is None:
@@ -416,40 +459,42 @@ class Pipeline:
                     return False, f"{tool}: il fix introduce finding nuovi: {listed}"
         return True, out
 
-    def _regression_fails_on_base(
-        self, co: Checkout, repo: RepoConfig, changes: Sequence[FileChange]
-    ) -> tuple[bool, str]:
-        """Il test di regressione deve fallire sul codice base, altrimenti non prova il bug.
+    def _suspicious_tests(self, co: Checkout, changes: Sequence[FileChange]) -> str:
+        """Euristica: un test di regressione che esce dal processo o manipola la raccolta
+        dei test può rendere verde qualunque suite."""
+        for path in added_tests(changes):
+            _, content = self.vcs.file_versions(co, path)
+            markers = suspicious_test_content(content or "")
+            if markers:
+                return f"test di regressione sospetto {path}: {', '.join(markers)}"
+        return ""
 
-        Si fotografano i file del fix, si riporta la working tree al base, si rimettono solo
-        i test nuovi e si lancia `test_command`: deve uscire con errore. Poi si ripristina il
-        fix e si controlla che il diff sia identico a prima.
+    def _bug_checks(
+        self, co: Checkout, repo: RepoConfig, changes: Sequence[FileChange], tree: str
+    ) -> tuple[bool, str]:
+        """Due controlli sul test di regressione, sempre su fotografie git del fix:
+
+        1. sul codice base, con i soli test nuovi, la suite deve fallire (il test prova il bug);
+        2. sul codice fixato, senza i test nuovi, la suite deve passare (un test nuovo non
+           può mascherare una suite rotta, es. uscendo dal processo con codice 0).
+
+        Alla fine la working tree torna identica alla fotografia (stesso tree git).
         """
         tests = added_tests(changes)
-        deleted = [c.path for c in changes if c.status == "deleted"]
-        with self.sandboxes.open(co.worktree) as sb:
-            snapshot = {c.path: sb.read(c.path) for c in changes if c.status != "deleted"}
         try:
-            self.vcs.reset(co)
-            with self.sandboxes.open(co.worktree) as sb:
-                for path in tests:
-                    sb.write(path, snapshot[path])
-                self._setup(repo, sb)
-                base = sb.exec(repo.test_command, timeout=TEST_TIMEOUT)
+            self.vcs.materialize(co, tree, include=tests)
+            base_ok, _, base_out = self._run_tests(co, repo)
+            if base_ok:
+                return False, "il test di regressione passa anche senza il fix: non dimostra il bug"
+            self.vcs.materialize(co, tree, exclude=tests)
+            rest_ok, code, rest_out = self._run_tests(co, repo)
+            if not rest_ok:
+                return False, f"suite rossa senza i test aggiunti (exit={code}):\n{rest_out}"
         finally:
-            self.vcs.reset(co)
-            with self.sandboxes.open(co.worktree) as sb:
-                for path, content in snapshot.items():
-                    sb.write(path, content)
-                for path in deleted:
-                    sb.exec(f"rm -f -- {shlex.quote(path)}", timeout=60)
-        if sorted(self.vcs.changes(co), key=lambda c: c.path) != sorted(
-            changes, key=lambda c: c.path
-        ):
-            raise RuntimeError("ripristino del fix non riuscito dopo il controllo sul base")
-        if base.ok:
-            return False, "il test di regressione passa anche senza il fix: non dimostra il bug"
-        return True, truncate(base.output, 2000)
+            self.vcs.materialize(co, tree)
+        if self.vcs.snapshot(co) != tree:
+            raise RuntimeError("ripristino del fix non riuscito dopo i controlli del bug")
+        return True, truncate(base_out, 2000)
 
     def _budget_stop(self, repo: RepoConfig, task: Task, meter: Meter, branch: str) -> FixResult:
         # Se è finito il tetto del task il finding è costoso: conta come tentativo.

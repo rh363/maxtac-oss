@@ -125,14 +125,42 @@ dice perché. La notte dopo si riparte normalmente.
 - Ottimizzazione futura: il triage può passare alla Batch API (-50% su input e output), visto
   che di notte la latenza non conta.
 
-## Sicurezza in breve
+## Sicurezza
 
-- Il contenuto dei repo è input non fidato (prompt injection inclusa).
-- La chiave API e il token GitLab restano nell'orchestrator; il sandbox non li riceve mai.
-- Il sandbox sta su una rete interna; l'unica uscita è un proxy con allowlist dei registry.
-- Git con `--git-dir`/`--work-tree` espliciti, hooks e fsmonitor disattivati.
-- La config di fiducia (comandi di test e setup) sta nel file dell'orchestrator, mai nei repo.
-- Verifica indipendente dall'agente, nessun auto-merge.
+Ipotesi di partenza: il contenuto dei repo (codice, commenti, nomi di file, lockfile, output
+dei test) è input non fidato e può contenere prompt injection. Lo stesso vale per tutto ciò
+che produce il modello che lo ha letto.
+
+| Rischio | Contromisura |
+| --- | --- |
+| Esfiltrazione di chiave API o token GitLab | Solo nell'orchestrator (Docker secret); mai nel sandbox, in argv, nell'URL del remoto o nei log |
+| Code execution nell'orchestrator via git | Git dir separata e non montata, `.git` (file o directory) nella working tree eliminato prima di ogni comando, hooks/fsmonitor/filtri/protocolli non https disattivati, config globale ignorata |
+| Quick action GitLab (`/merge`, `/approve`) e menzioni nella MR | Campi non fidati su una riga con `\|` e backtick neutralizzati; motivazioni, riassunto e output dei test in blocchi di codice; nessuna riga della descrizione può iniziare con `/`; `@` neutralizzato |
+| Agente che bara sui test | Per CVE e SAST nessun file di test toccabile (nemmeno aggiunto); config di CI, test runner e scanner protetta ovunque nel repo; `pyproject.toml`/`package.json` ammessi per le CVE solo se non cambiano le sezioni di test e scanner; symlink e submodule sempre a un umano |
+| Test di regressione finti (bug) | Il test nuovo deve fallire sul codice base; la suite senza i test nuovi deve passare sul fix; euristica su `os._exit`, `sys.exit`, `TestMain`, `pytest.exit` & co. |
+| Soppressioni del finding | semgrep `--disable-nosem`, bandit `--ignore-nosec`, gosec `-nosec`, osv-scanner con config vuota esplicita; i file di config degli scanner sono protetti |
+| Scanner o tool finti piazzati dal codice del repo | Rescan in un sandbox nuovo dove non girano né setup né test, sulla fotografia git del fix; scanner e utility per path assoluto; `PATH` con le directory di sistema prima di quelle scrivibili |
+| File ignorati che truccano la verifica (`.venv/bin/pytest`, `node_modules/.bin`, `.pyc`) | `git clean -ffdx` dopo l'agente; la working tree viene riportata alla fotografia del fix prima di ogni passo |
+| Contenuto non verificato nella MR | Snapshot come tree git (binari, symlink, file grandi inclusi): test, rescan e controlli dei bug lavorano su quella fotografia e si verifica che la working tree torni identica |
+| Sandbox privilegiato | Non root, `cap_drop: ALL`, `no-new-privileges`, rootfs in sola lettura, limiti CPU/RAM/PID, rete `internal` |
+| Sandbox bloccato (processo in background che tiene aperto stdout) | Watchdog: oltre timeout + margine il container viene ucciso |
+| Egress dal sandbox | Squid con allowlist dei soli registry (PyPI, proxy Go senza `direct`, npm), solo CONNECT su 443; ruleset semgrep e database OSV sono nell'immagine |
+| Spesa fuori controllo | Tetti per notte, task e hunting; tetto della notte ridotto ai crediti del mese rimasti e run non avviata a crediti esauriti; spesa delle risposte strutturate inutilizzabili addebitata comunque |
+| Disco pieno | Working tree e git dir eliminate a fine repo (anche in dry-run: i diff stanno nel report) |
+| Supply chain | Scanner Python installati con `--require-hashes` (`scripts/lock-sandbox-tools.sh`), digest delle immagini con `scripts/pin-digests.sh`, `go install` coperto da sumdb |
+| Merge automatico | Mai: ogni MR passa da review umana |
+
+Rischi residui, accettati e da rivalutare:
+
+- **Pubblicazione su registry.** Squid su HTTPS vede solo l'host. Un agente compromesso con
+  credenziali *proprie* potrebbe pubblicare su PyPI o npm e così esfiltrare codice. La
+  mitigazione è un mirror in sola lettura (devpi, verdaccio, Athens per Go) con l'allowlist
+  ridotta ai soli mirror.
+- **Kernel condiviso.** Il sandbox gira con lo stesso uid dei file dell'orchestrator: un escape
+  dal kernel darebbe accesso al db. Raccomandato: `userns-remap` nel daemon Docker oppure il
+  runtime gVisor (`runsc`), su una VM dedicata solo ad Autofix.
+- L'euristica sui test di regressione è aggirabile da un attaccante determinato: per questo
+  ogni MR di bug resta da rivedere con particolare attenzione al test aggiunto.
 
 ## Provarlo
 
@@ -281,6 +309,15 @@ Verificabile solo sulla VM:
   `internal`): `AUTOFIX_DOCKER_TESTS=1 uv run pytest -m docker`;
 - API GitLab della propria istanza (versione, permessi del bot, label);
 - chiamate vere alla Claude API: cache hit, fallback sui rifiuti, messaggio a crediti finiti.
+
+Prima della prima run vera:
+
+- `./scripts/pin-digests.sh` sulla VM e commit dei digest; `./scripts/pin-digests.sh --check`
+  deve uscire con 0;
+- build dell'immagine sandbox: verificare che i ruleset semgrep in config siano tutti in
+  `SEMGREP_RULESETS` (sandbox/Dockerfile) e che `/opt/osv-db` contenga i database;
+- `workdir` su un filesystem dedicato e limitato (es. volume LVM o file system loop da
+  20-50 GB montato su `/var/lib/autofix/work`), separato da quello del db SQLite.
 
 Checklist, una fase alla volta (ognuna si attiva solo dopo una notte pulita in dry-run):
 

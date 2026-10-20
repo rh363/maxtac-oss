@@ -139,8 +139,9 @@ def test_cve_fixed_verified_and_mr_opened(world):
         assert (
             rec.status is FindingStatus.MR_OPEN and rec.branch == branch and rec.mr_url == fx.mr_url
         )
-    # scan, fix e verifica in tre sandbox distinti; rescan dell'osv-scanner nella verifica
-    assert len(w.sandboxes.opened) == 3
+    # scan, fix, test e rescan in quattro sandbox distinti: il rescan non vede mai
+    # un sandbox in cui ha girato codice del repo
+    assert len(w.sandboxes.opened) == 4
     assert w.osv.calls == 2
     verify_sb = w.sandboxes.opened[2]
     assert verify_sb.commands == ["pip install -r requirements.txt", "pytest -q"]

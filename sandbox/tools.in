@@ -1,0 +1,3 @@
+# Scanner Python dell'immagine sandbox. Dopo un cambio: scripts/lock-sandbox-tools.sh
+semgrep==1.178.0
+bandit==1.9.4

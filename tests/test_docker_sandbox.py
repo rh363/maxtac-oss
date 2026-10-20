@@ -106,8 +106,8 @@ def test_exec_wraps_timeout_and_reports_exit(tmp_path: Path) -> None:
         slow = s.exec("sleep 999", timeout=5)
     assert slow.code == 124 and "timeout" in slow.output
     argv = client.api.created[0]["argv"]
-    assert argv[:3] == ["timeout", "--kill-after=10", "30"] and argv[3:] == [
-        "sh",
+    assert argv[:3] == ["/usr/bin/timeout", "--kill-after=10", "30"] and argv[3:] == [
+        "/bin/sh",
         "-c",
         "echo hello world",
     ]
@@ -153,7 +153,7 @@ def test_write_uses_put_archive_into_parent(tmp_path: Path) -> None:
     client = FakeDocker([(0, [])])
     with DockerSandbox(SPEC, client).open(tmp_path) as s:
         s.write("pkg/mod.py", "x = 1\n")
-    assert client.api.created[0]["argv"] == ["mkdir", "-p", "--", "/work/pkg"]
+    assert client.api.created[0]["argv"] == ["/bin/mkdir", "-p", "--", "/work/pkg"]
     path, data = client.containers.container.archives[0]
     assert path == "/work/pkg"
     with tarfile.open(fileobj=io.BytesIO(data)) as tar:

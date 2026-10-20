@@ -279,6 +279,7 @@ class AppConfig(_Model):
                 max_mrs_per_night=b.max_mrs_per_night,
                 max_attempts=b.max_attempts,
                 max_iterations=b.max_iterations,
+                monthly_credits_usd=b.monthly_credits_usd,
             ),
             models=Models(self.models.triage, self.models.fix, self.models.hunt),
             workdir=self.workdir,

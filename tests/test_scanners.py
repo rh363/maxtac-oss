@@ -22,7 +22,7 @@ class ScriptedSandbox:
 
     def exec(self, cmd: str, timeout: int) -> ExecResult:
         self.cmds.append(cmd)
-        if cmd.startswith("cat "):
+        if cmd.startswith("/bin/cat "):
             return ExecResult(0, self.payload) if self.payload is not None else ExecResult(1, "")
         return ExecResult(self.code, "")
 
@@ -73,7 +73,7 @@ def test_semgrep_normalizes_paths_and_severity() -> None:
     assert findings[0].rule.endswith("subprocess-shell-true")
     assert "CWE-78" in findings[0].detail
     cmd = sb.cmds[0]
-    assert cmd.count("--config p/python") == 1 and "--metrics=off" in cmd
+    assert cmd.count("--config /opt/semgrep-rules/p-python.yml") == 1 and "--metrics=off" in cmd
     assert "--exclude node_modules" in cmd
 
 
@@ -93,11 +93,13 @@ def test_bandit_drops_low_confidence() -> None:
     assert Bandit().supports(["python"]) and not Bandit().supports(["go"])
 
 
-def test_gosec_skips_nosec_and_parses_ranges() -> None:
+def test_gosec_keeps_nosec_findings_and_parses_ranges() -> None:
+    # gosec gira con -nosec: un `#nosec` aggiunto dall'agente non nasconde il finding
     findings = Gosec().scan(ScriptedSandbox(0, fixture("gosec.json")))
     assert [(f.rule, f.location, f.line, f.severity) for f in findings] == [
         ("G304", "cmd/fwagent/main.go", 41, Severity.MEDIUM),
         ("G204", "internal/exec/run.go", 18, Severity.HIGH),
+        ("G104", "internal/exec/run.go", 30, Severity.LOW),
     ]
     with pytest.raises(ScannerError):
         Gosec().scan(ScriptedSandbox(1, None))  # con -no-fail, exit 1 è un errore vero

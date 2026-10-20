@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import posixpath
+import tomllib
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Sequence
 from datetime import datetime, time, timedelta
@@ -21,29 +23,69 @@ from .models import (
 
 SUPPRESSED = {FindingStatus.IGNORED, FindingStatus.NEEDS_HUMAN, FindingStatus.MR_OPEN}
 
-# File di test e di CI: se il fix li modifica, la MR va rivista da un umano
-# (l'agente potrebbe aver "sistemato" i test invece del codice).
+# File di test: per CVE e SAST il fix non deve toccarli (nemmeno aggiungerne), per i bug
+# può solo aggiungere test nuovi. L'agente potrebbe "sistemare" i test invece del codice.
 TEST_PATTERNS = (
     "test_*.py",
     "*_test.py",
-    "conftest.py",
     "*_test.go",
     "*.test.ts",
     "*.test.js",
+    "*.test.tsx",
+    "*.test.jsx",
     "*.spec.ts",
     "*.spec.js",
 )
 TEST_DIRS = ("tests", "test", "__tests__", "testdata")
-CI_PATTERNS = (
+# Config di CI, dei test runner e degli scanner: protetta ovunque nel repo (basename).
+PROTECTED_NAMES = (
     ".gitlab-ci.yml",
-    ".gitlab/*",
-    ".github/*",
     "Jenkinsfile",
+    "conftest.py",
     "pytest.ini",
     "tox.ini",
     "noxfile.py",
+    "setup.cfg",
+    ".coveragerc",
     "Makefile",
+    "GNUmakefile",
+    "jest.config.*",
+    "vitest.config.*",
+    "vitest.workspace.*",
+    "karma.conf.*",
+    ".mocharc*",
+    "playwright.config.*",
+    ".semgrepignore",
+    ".semgrep*",
+    ".bandit",
+    "bandit.yaml",
+    "bandit.yml",
+    "osv-scanner.toml",
+    ".gosec*",
+    ".pre-commit-config.yaml",
 )
+PROTECTED_DIRS = (".gitlab", ".github")
+# Manifest che un bump di CVE deve poter toccare: protetti solo se cambia la parte che
+# configura test o scanner (confronto sul contenuto parsato, non sul testo).
+SEMANTIC_MANIFESTS = ("pyproject.toml", "package.json")
+PYPROJECT_GUARDED = ("pytest", "coverage", "bandit", "semgrep", "hatch", "tox")
+PACKAGE_JSON_GUARDED = ("scripts", "jest", "vitest", "mocha", "ava", "c8", "nyc")
+
+# Euristica sui test di regressione aggiunti: chi esce dal processo o salta la suite
+# può far risultare verde qualunque cosa. Non è una prova, ma blocca i casi ovvi.
+SUSPICIOUS_TEST_MARKERS = (
+    "os._exit",
+    "sys.exit",
+    "SystemExit",
+    "pytest.exit",
+    "TestMain",
+    "os.Exit",
+    "process.exit",
+    "collect_ignore",
+    "pytest_collection_modifyitems",
+)
+
+Versions = Callable[[str], tuple[str | None, str | None]]
 
 
 def branch_name(task: Task, prefix: str = "autofix") -> str:
@@ -120,26 +162,74 @@ def is_test_path(path: str) -> bool:
     )
 
 
-def is_ci_path(path: str) -> bool:
-    return any(fnmatch.fnmatch(path, p) for p in CI_PATTERNS)
+def is_protected_config(path: str) -> bool:
+    name = posixpath.basename(path)
+    parts = path.split("/")[:-1]
+    return any(fnmatch.fnmatch(name, p) for p in PROTECTED_NAMES) or any(
+        d in PROTECTED_DIRS for d in parts
+    )
 
 
-def protected_changes(changes: Iterable[FileChange]) -> list[str]:
-    """File di test esistenti o config CI toccati dal fix. Aggiungere test nuovi è ammesso."""
+def _guarded_sections(name: str, text: str | None) -> object:
+    if text is None:
+        return None
+    if name == "pyproject.toml":
+        tool = tomllib.loads(text).get("tool", {})
+        return {k: tool.get(k) for k in PYPROJECT_GUARDED}
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("package.json non è un oggetto")
+    return {k: data.get(k) for k in PACKAGE_JSON_GUARDED}
+
+
+def manifest_guard_changed(path: str, old: str | None, new: str | None) -> bool:
+    """True se cambia la config di test/scanner dentro pyproject.toml o package.json.
+    Un file che non si riesce a parsare conta come cambiato."""
+    name = posixpath.basename(path)
+    try:
+        return _guarded_sections(name, old) != _guarded_sections(name, new)
+    except (ValueError, tomllib.TOMLDecodeError):
+        return True
+
+
+def protected_changes(
+    changes: Iterable[FileChange], kind: str, versions: Versions | None = None
+) -> list[str]:
+    """Modifiche che il fix non può fare da solo: la MR passa a un umano.
+
+    - symlink e gitlink, ovunque;
+    - config di CI, test runner e scanner, ovunque nel repo;
+    - test: per CVE e SAST qualunque modifica (anche aggiunte), per i bug solo i nuovi;
+    - pyproject.toml / package.json: per SAST e bug sempre, per le CVE solo se cambiano
+      le sezioni dei test o degli scanner (serve `versions`, altrimenti protetti).
+    """
     out = []
     for c in changes:
-        if is_ci_path(c.path) or (c.status != "added" and is_test_path(c.path)):
+        if c.kind != "file" or is_protected_config(c.path):
+            out.append(c.path)
+        elif is_test_path(c.path):
+            if kind != "bug" or c.status != "added":
+                out.append(c.path)
+        elif posixpath.basename(c.path) in SEMANTIC_MANIFESTS and (
+            kind != "cve" or versions is None or manifest_guard_changed(c.path, *versions(c.path))
+        ):
             out.append(c.path)
     return out
 
 
+def suspicious_test_content(text: str) -> list[str]:
+    return [m for m in SUSPICIOUS_TEST_MARKERS if m in text]
+
+
 def adds_test(changes: Iterable[FileChange]) -> bool:
     """Per i bug serve un test di regressione nuovo."""
-    return any(c.status == "added" and is_test_path(c.path) for c in changes)
+    return bool(added_tests(changes))
 
 
 def added_tests(changes: Iterable[FileChange]) -> list[str]:
-    return [c.path for c in changes if c.status == "added" and is_test_path(c.path)]
+    return [
+        c.path for c in changes if c.status == "added" and c.kind == "file" and is_test_path(c.path)
+    ]
 
 
 # Un fix non deve introdurre finding nuovi dello stesso scanner. Sotto questa soglia
