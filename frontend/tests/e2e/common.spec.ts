@@ -158,3 +158,11 @@ test('impostazioni in sola lettura, senza utenti né temi', async ({ page }) => 
 	expect(main).not.toMatch(/allowed|boss|tema|theme/i);
 	expect(w.problems).toEqual([]);
 });
+
+test('la sidebar resta visibile scorrendo una pagina lunga', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 600 });
+	await page.goto('/repos');
+	await expect(page.getByTestId('repos')).toBeVisible();
+	await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+	await expect(page.getByRole('navigation').getByRole('link').first()).toBeInViewport();
+});
