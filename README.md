@@ -373,6 +373,18 @@ purché la ricarica automatica sia spenta sulla Console Anthropic.
 **`status` dice che manca un segreto.** Controlla che il file esista in `secrets/` e non sia
 vuoto, poi `docker compose restart orchestrator`.
 
+**`autofix tokens` va in timeout, ma dalla VM GitLab risponde.** Spesso è l'MTU: su reti
+overlay (Proxmox SDN, VXLAN, alcuni cloud) l'interfaccia della VM ha MTU 1450 e le reti
+Docker 1500. Controlla con `ip link`; se è più basso di 1500, imposta lo stesso valore per
+Docker in `/etc/docker/daemon.json`:
+
+```json
+{"mtu": 1450, "default-network-opts": {"bridge": {"com.docker.network.driver.mtu": "1450"}}}
+```
+
+poi `systemctl restart docker`, `docker compose down` e `./scripts/update.sh` (le reti si
+ricreano con il nuovo MTU).
+
 **Errore di certificato verso GitLab.** L'istanza usa una CA interna: vedi il passo 4
 dell'installazione.
 

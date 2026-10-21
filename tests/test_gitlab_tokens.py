@@ -420,3 +420,17 @@ def test_tokens_command_rechecks_and_fails_on_bad_token(
     assert code == 1
     assert "team [team]: ok (utente group_7_bot_ab12; scade il 2027-06-01)" in out
     assert "api [team/api]: ERRORE" in out and "value-api" not in out
+
+
+def test_gitlab_client_has_timeout(tmp_path: Path) -> None:
+    """Senza timeout una GitLab irraggiungibile (es. solo IPv6) lascia `tokens` appeso."""
+    from maxtac.container import Container
+
+    data = raw()
+    data["db_path"] = str(tmp_path / "db.sqlite3")
+    data["workdir"] = str(tmp_path / "work")
+    cfg = load_config(write(tmp_path, data))
+    assert cfg.gitlab.timeout_s == 30.0
+    data["gitlab"]["timeout_s"] = 5
+    c = Container.build(load_config(write(tmp_path, data)))
+    assert c._client(SECRET).timeout == 5

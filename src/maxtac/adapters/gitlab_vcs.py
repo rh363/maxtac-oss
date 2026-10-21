@@ -187,6 +187,7 @@ class GitLabVCS:
                 self.url,
                 private_token=token,
                 ssl_verify=str(ca_bundle) if ca_bundle else True,
+                timeout=30,
             )
         self._gl = client
         self._remote_url = remote_url or (lambda project: f"{self.url}/{project}.git")
