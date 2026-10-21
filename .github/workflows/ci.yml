@@ -141,3 +141,7 @@ jobs:
         run: |
           docker compose --profile web --profile sandbox config --quiet
           docker compose pull proxy
+      - name: sandbox proxy starts and enforces the allowlist
+        env:
+          DOCKER_GID: "999"
+        run: ./scripts/smoke-proxy.sh
