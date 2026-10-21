@@ -81,7 +81,8 @@ def test_status_theme_per_user(config, capsys):
 
 
 def test_run_without_api_key_fails_clearly(config, capsys, monkeypatch):
-    monkeypatch.setenv("GITLAB_TOKEN", "glpat-test")
+    monkeypatch.setenv("GITLAB_TOKEN_TEAM", "glpat-test")
+    monkeypatch.setenv("GITLAB_TOKEN_ALICE_TOOLS", "glpat-test")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert cli.main(["--config", str(config), "--as", "capo", "run", "--dry-run"]) == 2
     err = capsys.readouterr().err
@@ -112,7 +113,7 @@ def test_status_shows_monthly_credits_and_projection(config, capsys, monkeypatch
     assert "proiezione a fine mese" in out and "ATTENZIONE" in out  # 40$ in 10 giorni → 124$
 
 
-def test_patrol_survives_a_failing_run(config, monkeypatch, caplog):
+def test_schedule_survives_a_failing_run(config, monkeypatch, caplog):
     from maxtac.container import Container
 
     cfg = cli.load_config(config)
@@ -123,7 +124,7 @@ def test_patrol_survives_a_failing_run(config, monkeypatch, caplog):
 
     monkeypatch.setattr(c, "pipeline", boom)
     slept: list[float] = []
-    cli.patrol_once(c, cli.lexicon("neutral"), sleep=lambda s: slept.append(s) or _advance(c))
+    cli.schedule_once(c, cli.lexicon("neutral"), sleep=lambda s: slept.append(s) or _advance(c))
     assert "run fallita" in caplog.text
     c.close()
 

@@ -1,4 +1,5 @@
-"""CLI: `run`, `patrol` (scheduler) e `status`. Adapter driver sottile sopra la pipeline."""
+"""CLI: `run`, `schedule` (scheduler), `status`, `tokens`, `repos`, `web`. Adapter driver sottile
+sopra la pipeline."""
 
 from __future__ import annotations
 
@@ -17,15 +18,21 @@ from maxtac import cli_repos
 from maxtac.config import DEFAULT_CONFIG_PATH, AppConfig, load_config, load_secrets
 from maxtac.container import Container, MissingSecret
 from maxtac.domain.models import RepoConfig, RunReport
-from maxtac.domain.policy import next_run_at
+from maxtac.domain.policy import next_run_at, token_state
 from maxtac.presentation.lexicon import NEUTRAL, Lexicon, lexicon
-from maxtac.presentation.report import render_run, render_scan, render_status, scan_json
+from maxtac.presentation.report import (
+    render_run,
+    render_scan,
+    render_status,
+    scan_json,
+    token_line,
+)
 
 log = logging.getLogger("maxtac")
 
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="maxtac", description="Autofix per repo GitLab")
+    p = argparse.ArgumentParser(prog="autofix", description="Autofix per repo GitLab")
     p.add_argument(
         "--config",
         type=Path,
@@ -45,8 +52,9 @@ def _parser() -> argparse.ArgumentParser:
         help="solo checkout e scan: elenca i finding normalizzati, zero token, nessuna scrittura",
     )
 
-    sub.add_parser("patrol", help="resta in esecuzione e lancia la run all'ora configurata")
-    sub.add_parser("status", help="spesa del mese, finding e MR aperte")
+    sub.add_parser("schedule", help="resta in esecuzione e lancia la run all'ora configurata")
+    sub.add_parser("status", help="spesa del mese, finding, MR aperte e token")
+    sub.add_parser("tokens", help="ricontrolla subito i token GitLab: utente, scope e scadenza")
     cli_repos.add_parser(sub)
 
     web = sub.add_parser("web", help="dashboard web in sola lettura")
@@ -136,7 +144,7 @@ def cmd_run(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
     return 0 if all(not r.errors for r in report.repos) else 1
 
 
-def patrol_once(c: Container, lx: Lexicon, sleep: Callable[[float], None] = time.sleep) -> None:
+def schedule_once(c: Container, lx: Lexicon, sleep: Callable[[float], None] = time.sleep) -> None:
     """Aspetta il prossimo orario e lancia una run. Un'eccezione non ferma lo scheduler."""
     sched = c.config.schedule
     when = next_run_at(c.clock(), sched.at, sched.timezone)
@@ -152,10 +160,10 @@ def patrol_once(c: Container, lx: Lexicon, sleep: Callable[[float], None] = time
         log.exception("run fallita, riprovo alla prossima finestra")
 
 
-def cmd_patrol(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
+def cmd_schedule(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
     c.pipeline(dry_run=False)  # fallisce subito se mancano segreti o config
     while True:
-        patrol_once(c, lx)
+        schedule_once(c, lx)
 
 
 def cmd_status(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
@@ -173,16 +181,34 @@ def cmd_status(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
             open_mrs=c.store.open_mrs(),
             next_run=next_run_at(now, sched.at, sched.timezone).isoformat(),
             runs=c.runs.recent_runs(5),
+            tokens=c.tokens.tokens(),
+            today=now.date(),
         )
     )
     return 0
+
+
+def cmd_tokens(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
+    c.vcs()  # controlla ogni token su GitLab e salva lo stato
+    today = c.clock().date()
+    infos = c.tokens.tokens()
+    for t in infos:
+        print(token_line(t, today))
+    bad = [t for t in infos if token_state(t, today) in ("error", "expired")]
+    return 1 if bad else 0
 
 
 def cmd_repos(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
     return cli_repos.run(c, args)
 
 
-COMMANDS = {"run": cmd_run, "patrol": cmd_patrol, "status": cmd_status, "repos": cmd_repos}
+COMMANDS = {
+    "run": cmd_run,
+    "schedule": cmd_schedule,
+    "status": cmd_status,
+    "tokens": cmd_tokens,
+    "repos": cmd_repos,
+}
 
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
@@ -230,7 +256,18 @@ def cmd_web(cfg: AppConfig, args: argparse.Namespace) -> int:
     return 0
 
 
+VALUE_OPTIONS = {"--config", "--as", "--theme"}
+
+# Vecchi nomi dei sottocomandi, accettati ma non mostrati nell'help
+ALIASES = {"patrol": "schedule"}
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    for i, arg in enumerate(argv):
+        if not arg.startswith("-") and (i == 0 or argv[i - 1] not in VALUE_OPTIONS):
+            argv[i] = ALIASES.get(arg, arg)  # solo il sottocomando, il primo argomento libero
+            break
     args = _parser().parse_args(argv)
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

@@ -37,7 +37,8 @@ dashboard con Playwright su dati demo. Verificabile solo sulla VM:
 sudo mkdir -p /var/lib/autofix && sudo chown 1000:1000 /var/lib/autofix
 mkdir -p secrets && chmod 700 secrets
 printf '%s' "$ANTHROPIC_KEY" > secrets/anthropic_api_key
-printf '%s' "$GITLAB_TOKEN" > secrets/gitlab_token
+mkdir -p secrets/gitlab_tokens
+printf '%s' "$GITLAB_TOKEN_TEAM" > secrets/gitlab_tokens/team   # uno per voce di gitlab.tokens
 cp config.example.yaml config.yaml
 export DOCKER_GID=$(stat -c %g /var/run/docker.sock)
 docker compose --profile build build sandbox-image          # immagine dei sandbox

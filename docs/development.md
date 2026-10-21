@@ -34,15 +34,18 @@ Comandi:
   disco;
 - `autofix run --scan-only`: solo checkout e scan (tutti gli scanner, zero token): stampa i
   finding normalizzati e li scrive in `workdir/<run_id>/findings.json`. Non tocca lo store;
-- `autofix patrol`: resta in esecuzione e lancia la run all'ora configurata (`schedule`);
-- `autofix status`: spesa del mese, finding tracciati, MR aperte, ultime run;
+- `autofix schedule`: resta in esecuzione e lancia la run all'ora configurata (sezione
+  `schedule` della config);
+- `autofix status`: spesa del mese, finding tracciati, MR aperte, ultime run, stato dei token
+  GitLab all'ultimo controllo;
+- `autofix tokens`: ricontrolla subito i token GitLab (utente, scope, scadenza) e salva lo stato;
 - `autofix repos ...`: autodiscovery e approvazione dei repo (vedi
   [architecture.md](architecture.md#autodiscovery-dei-repo));
 - `autofix web`: dashboard (`--dev` per lo sviluppo, `--export-openapi PATH` per il contratto).
 
 Opzioni globali: `--config`, `--as` (utente di cui usare il tema a schermo), `--theme`,
 `-v`. Senza token GitLab o chiave Anthropic il codice d'uscita è 2, con un messaggio che dice
-cosa manca (mai il valore). `patrol` sopravvive a una run fallita: logga l'errore e aspetta la
+cosa manca (mai il valore). `schedule` sopravvive a una run fallita: logga l'errore e aspetta la
 finestra successiva, ricostruendo la pipeline a ogni notte.
 
 ## Contratto dell'API

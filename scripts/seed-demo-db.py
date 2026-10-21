@@ -22,6 +22,7 @@ from maxtac.adapters.sqlite_store import (
     SqliteRepoRegistry,
     SqliteRunStore,
     SqliteStore,
+    SqliteTokenRegistry,
     connect,
 )
 from maxtac.domain.models import (
@@ -36,6 +37,7 @@ from maxtac.domain.models import (
     RunReport,
     Severity,
     Task,
+    TokenInfo,
 )
 from maxtac.domain.policy import branch_name
 
@@ -382,6 +384,11 @@ REPO_CONF = {
     "alex/oidc-admin": (["python", "typescript"], "pip install -r requirements.txt", "pytest -q"),
 }
 APPROVED = "alex/status-page"
+# Un Group/Project token per il namespace e uno più specifico per un progetto
+TOKENS = [
+    {"name": "alex", "scope": ["alex"]},
+    {"name": "oidc-admin", "scope": ["alex/oidc-admin"]},
+]
 VITEST_OK = "Test Files  18 passed (18)\n     Tests  142 passed (142)\n  Duration  9.84s"
 
 
@@ -539,9 +546,31 @@ def main() -> None:
         history.save_run(r)
     seed_spend(budget, now, saved)
     seed_discovery(SqliteRepoRegistry(conn), now)
+    SqliteTokenRegistry(conn).save_tokens(
+        [
+            TokenInfo(
+                "alex",
+                ("alex",),
+                now,
+                "group_12_bot_7f3a",
+                (now + timedelta(days=210)).date(),
+                ("api",),
+            ),
+            TokenInfo(
+                "oidc-admin",
+                ("alex/oidc-admin",),
+                now,
+                "project_88_bot_c41e",
+                (now + timedelta(days=12)).date(),
+                ("api",),
+            ),
+        ]
+    )
     conn.close()
 
     cfg = yaml.safe_load((ROOT / "config.example.yaml").read_text(encoding="utf-8"))
+    cfg["gitlab"].pop("bot_username", None)
+    cfg["gitlab"]["tokens"] = TOKENS
     cfg["db_path"] = str(db)
     cfg["workdir"] = str(out / "work")
     cfg["features"] = {"cve": True, "sast": True, "hunting": True}

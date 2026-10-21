@@ -12,12 +12,12 @@ assegnazione dei temi. `config.example.yaml` usa solo domini d'esempio (un test 
 ## Segreti
 
 Docker secret in `/run/secrets/` (file in `secrets/` accanto al compose). In sviluppo valgono
-anche le variabili `ANTHROPIC_API_KEY` e `GITLAB_TOKEN`.
+anche le variabili d'ambiente omonime in maiuscolo (`ANTHROPIC_API_KEY`, `GITLAB_TOKEN_<NOME>`).
 
 | File | Usato da | Contenuto |
 | --- | --- | --- |
 | `anthropic_api_key` | orchestrator | chiave API Anthropic |
-| `gitlab_token` | orchestrator | token GitLab (Group/Project Access Token, ruolo Developer, scope `api`) |
+| `gitlab_tokens/<nome>` | orchestrator | un file per ogni token di `gitlab.tokens` (Group/Project Access Token, ruolo Developer, scope `api`). La directory `secrets/gitlab_tokens` è montata dal compose: aggiungere un token non richiede di toccarlo |
 | `notify_webhook_url` | orchestrator | URL del webhook del mattino (solo con `notify.webhook: true`) |
 | `oidc_client_secret` | web | secret dell'Application OIDC su GitLab |
 | `web_session_secret` | web | stringa casuale di almeno 32 caratteri per firmare le sessioni |
@@ -33,13 +33,54 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")' > secrets/
 | Chiave | Default | Note |
 | --- | --- | --- |
 | `url` | | solo `https://` |
-| `bot_username` | | username dell'utente legato al token (il bot creato dall'Access Token, o il tuo con un token personale) |
-| `bot_name` | `Autofix Bot` | nome dei commit |
-| `bot_email` | `<bot_username>@noreply.<host>` | email dei commit |
+| `tokens` | nessuno | elenco dei token, vedi sotto |
 | `ca_bundle` | nessuno | bundle PEM della CA interna, per API, git e login OIDC verso GitLab. Va montato nei container `orchestrator` e `web` (righe commentate in `docker-compose.yml`) |
 
-Oggi è supportato un solo token: tutti i repo devono essere raggiungibili con lo stesso token
-(per esempio un Group Access Token sul gruppo che li contiene).
+#### `gitlab.tokens`
+
+Un token per ogni gruppo o progetto da controllare. Ogni voce:
+
+| Chiave | Note |
+| --- | --- |
+| `name` | minuscole, cifre e `-`; il valore del token sta in `secrets/gitlab_tokens/<name>` |
+| `scope` | prefissi di path GitLab coperti: un gruppo (`team`, sottogruppi compresi), un sottogruppo (`team/backend`) o un progetto (`alice/tools`) |
+| `bot_name` | facoltativo: nome dei commit al posto di quello dell'utente del token |
+
+```yaml
+gitlab:
+  url: https://gitlab.example.it
+  tokens:
+    - name: team            # Group Access Token del gruppo team
+      scope: [team]
+    - name: alice-tools     # Project Access Token di un progetto personale
+      scope: [alice/tools]
+```
+
+Regole:
+
+- Il confronto è per segmenti di path: `team` copre `team/api` e `team/backend/worker`, non
+  `team2/api`.
+- Ogni repo usa il token con il **prefisso più specifico** che lo copre: con `team` e
+  `team/api` in due token diversi, `team/api` usa il secondo e il resto del gruppo il primo.
+- Lo stesso prefisso in due token, nomi duplicati o un repo del `config.yaml` che nessun token
+  copre bloccano l'avvio. Un repo approvato dall'autodiscovery che nessun token copre viene
+  saltato con il motivo nel report, e `autofix repos approve` lo rifiuta.
+- Utente, nome ed email dei commit si leggono da GitLab (`GET /user` con il token): non vanno
+  scritti in config. L'email è quella pubblica dell'utente, altrimenti
+  `<username>@noreply.<host>`.
+- A ogni run, e con `autofix tokens`, ogni token viene controllato su GitLab: utente, scope
+  (deve avere `api`) e scadenza (`GET /personal_access_tokens/self`; se la versione di GitLab
+  non lo espone, la scadenza risulta "non verificata"). Lo stato finisce nel db e lo
+  mostrano `autofix status` e la pagina Impostazioni della dashboard, con un avviso nei 30
+  giorni prima della scadenza. Un token non valido ferma solo i repo che copre.
+- `autofix repos discover --all` chiede i progetti a ogni token e tiene solo quelli dentro il
+  suo `scope`.
+
+**Configurazione senza `tokens` (versioni precedenti).** Un solo token per tutta l'istanza,
+dal Docker secret `gitlab_token`, dal file `secrets/gitlab_tokens/default` o dalla variabile
+`GITLAB_TOKEN`. In questo caso valgono ancora `bot_username`, `bot_name` e `bot_email` per
+forzare l'identità dei commit. Il compose attuale non dichiara più il secret `gitlab_token`:
+usa il file in `secrets/gitlab_tokens/default` oppure passa a `tokens`.
 
 ### `schedule`
 

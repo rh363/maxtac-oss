@@ -1,10 +1,16 @@
 # Config di fiducia dell'orchestrator. Mai dentro i repo: un file nel repo sarebbe input non fidato.
-# I segreti (anthropic_api_key, gitlab_token) stanno in /run/secrets come Docker secret.
+# I segreti stanno in secrets/ (montati in /run/secrets): mai in questo file.
 gitlab:
   url: https://gitlab.example.it
-  bot_username: autofix-bot
-  bot_name: Autofix Bot
-  bot_email: autofix-bot@noreply.gitlab.example.it
+  # Un token per gruppo o progetto (Group/Project Access Token: ruolo Developer, scope api).
+  # Il valore di ciascuno va nel file secrets/gitlab_tokens/<name>. Ogni repo usa il token
+  # con il prefisso più specifico che lo copre; utente e nome dei commit si leggono da GitLab.
+  tokens:
+    - name: team                  # Group Access Token del gruppo `team`, sottogruppi compresi
+      scope: [team]
+    - name: alice-tools           # Project Access Token di un progetto personale
+      scope: [alice/tools]
+      # bot_name: Autofix         # facoltativo: nome dei commit al posto di quello del bot
   # GitLab self-hosted con certificato di una CA interna: il bundle PEM vale per API, git e
   # (se l'IdP è GitLab stesso) per il login della dashboard. Va montato nei container
   # orchestrator e web (vedi docker-compose.yml). Il sandbox non lo riceve.

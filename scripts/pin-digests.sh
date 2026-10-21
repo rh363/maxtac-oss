@@ -6,7 +6,7 @@
 #   ./scripts/pin-digests.sh --check  # esce con 1 se qualche immagine non è pinnata
 set -eu
 cd "$(dirname "$0")/.."
-FILES="Dockerfile sandbox/Dockerfile docker-compose.yml"
+FILES="Dockerfile Dockerfile.web sandbox/Dockerfile docker-compose.yml"
 CHECK="${1:-}"
 
 refs() {

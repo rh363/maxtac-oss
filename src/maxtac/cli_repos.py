@@ -1,4 +1,4 @@
-"""`maxtac repos ...`: autodiscovery e approvazione dei repo, solo dalla CLI dell'orchestrator.
+"""`autofix repos ...`: autodiscovery e approvazione dei repo, solo dalla CLI dell'orchestrator.
 
 I comandi scoperti sono input non fidato: diventano config di fiducia solo con `approve`.
 """
@@ -22,7 +22,7 @@ from maxtac.config import RepoConf
 from maxtac.container import Container
 from maxtac.domain.budget import BudgetExceeded
 from maxtac.domain.models import ProposalStatus, RepoConfig, RepoProposal
-from maxtac.domain.policy import approval_blockers, command_suspicions
+from maxtac.domain.policy import approval_blockers, command_suspicions, resolve_token
 from maxtac.domain.ports import LLMUnavailable
 from maxtac.services.discovery import proposal_diff
 
@@ -58,10 +58,19 @@ def add_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None
     )
 
 
-def _show(p: RepoProposal) -> str:
+NO_TOKEN = "NESSUNO (aggiungilo a gitlab.tokens)"
+
+
+def _token(c: Container, project: str) -> str:
+    """Nome del token che userebbe il repo: si ricava dalla config, mai salvato altrove."""
+    return resolve_token(project, c.config.gitlab.token_scopes()) or NO_TOKEN
+
+
+def _show(p: RepoProposal, token: str) -> str:
     base = {True: "verde", False: "ROSSA", None: "non eseguita"}[p.baseline_ok]
     lines = [
         f"progetto:       {p.project}  (proposta #{p.id}, {p.status.value})",
+        f"token GitLab:   {token}",
         f"creata:         {p.created_at.isoformat()}  costo {p.cost_usd:.4f}$",
         f"linguaggi:      {', '.join(p.languages) or '-'}",
         f"setup_command:  {p.setup_command or '-'}",
@@ -147,7 +156,7 @@ def cmd_discover(c: Container, args: argparse.Namespace) -> int:
             failed += 1
             print(f"{project}: discovery fallita: {type(e).__name__}: {e}", file=sys.stderr)
             continue
-        print(_show(p))
+        print(_show(p, _token(c, project)))
         current = c.registry.approved(project)
         if current is not None:
             diff = proposal_diff(current.repo, p)
@@ -178,8 +187,11 @@ def cmd_list(c: Container, args: argparse.Namespace) -> int:
         print("nessun repo: aggiungili al config.yaml o usa `autofix repos discover`")
         return 0
     width = max(len(r[0]) for r in rows)
+    tokens = {project: _token(c, project) for project, *_ in rows}
+    tw = max(len(t) for t in tokens.values())
     for project, source, langs, test in rows:
-        print(f"{project:<{width}}  {source:<28}  {langs:<20}  {test}")
+        token = tokens[project]
+        print(f"{project:<{width}}  {source:<28}  {token:<{tw}}  {langs:<20}  {test}")
     return 0
 
 
@@ -195,9 +207,9 @@ def cmd_show(c: Container, args: argparse.Namespace) -> int:
             f"{r.project}: approvato da {current.approved_by} il {current.approved_at.isoformat()}"
         )
         print(f"  linguaggi: {', '.join(r.languages)}\n  setup: {r.setup_command or '-'}")
-        print(f"  test: {r.test_command}")
+        print(f"  test: {r.test_command}\n  token GitLab: {_token(c, r.project)}")
         return 0
-    print(_show(p))
+    print(_show(p, _token(c, p.project)))
     if current is not None:
         print("\n".join(["differenze dall'approvato:", *proposal_diff(current.repo, p)]))
     return 0
@@ -215,6 +227,13 @@ def cmd_approve(c: Container, args: argparse.Namespace, editor: Editor = _system
         if (edited.setup_command, edited.test_command) != (p.setup_command, p.test_command):
             print("nota: la baseline si riferisce ai comandi originali, non a quelli corretti")
         p = edited
+    if _token(c, p.project) == NO_TOKEN:
+        print(
+            f"{p.project}: nessun token in gitlab.tokens copre questo progetto: "
+            "aggiungine uno prima di approvarlo",
+            file=sys.stderr,
+        )
+        return 1
     problems = approval_blockers(p)
     if problems and not args.force:
         print(f"{p.project}: non approvo senza --force:", file=sys.stderr)

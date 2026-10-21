@@ -8,8 +8,9 @@ import posixpath
 import re
 import tomllib
 from collections import defaultdict
-from collections.abc import Callable, Collection, Iterable, Sequence
-from datetime import datetime, time, timedelta
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from datetime import date, datetime, time, timedelta
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from .models import (
@@ -21,6 +22,7 @@ from .models import (
     RepoProposal,
     Severity,
     Task,
+    TokenInfo,
 )
 
 SUPPRESSED = {FindingStatus.IGNORED, FindingStatus.NEEDS_HUMAN, FindingStatus.MR_OPEN}
@@ -371,3 +373,42 @@ def approval_blockers(p: RepoProposal) -> list[str]:
     if not p.languages:
         problems.append("nessun linguaggio")
     return problems
+
+
+# --- token GitLab ---
+
+TOKEN_EXPIRY_WARNING_DAYS = 30
+
+
+def covers(prefix: str, project: str) -> bool:
+    """`backend` copre `backend/x` e `backend/sub/y`, non `backend2/x`. "" copre tutto."""
+    return prefix == "" or project == prefix or project.startswith(prefix + "/")
+
+
+def resolve_token(project: str, scopes: Mapping[str, Sequence[str]]) -> str | None:
+    """Nome del token con il prefisso più specifico che copre `project`, o None.
+
+    I prefissi sono unici tra i token (lo garantisce la config): a parità di lunghezza due
+    prefissi che coprono lo stesso progetto sarebbero identici, quindi non c'è pareggio.
+    """
+    best: tuple[int, str] | None = None
+    for name, prefixes in scopes.items():
+        for prefix in prefixes:
+            if covers(prefix, project) and (best is None or len(prefix) > best[0]):
+                best = (len(prefix), name)
+    return best[1] if best else None
+
+
+TokenState = Literal["ok", "expiring", "expired", "unknown", "error"]
+
+
+def token_state(info: TokenInfo, today: date) -> TokenState:
+    """ok | expiring | expired | unknown | error."""
+    if info.error:
+        return "error"
+    if info.expires_at is None:
+        return "unknown"
+    days = (info.expires_at - today).days
+    if days < 0:
+        return "expired"
+    return "expiring" if days <= TOKEN_EXPIRY_WARNING_DAYS else "ok"

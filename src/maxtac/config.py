@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Literal, Self
 
@@ -13,6 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from maxtac.domain.budget import ModelPrice, Pricing
 from maxtac.domain.models import Language, RepoConfig
+from maxtac.domain.policy import resolve_token
 from maxtac.services.pipeline import Limits, Models, PipelineSettings
 
 ThemeName = Literal["neutral", "cyberpunk"]
@@ -24,18 +26,87 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+SCOPE_RE = re.compile(r"^[\w.-]+(/[\w.-]+)*$")
+LEGACY_TOKEN = "default"
+
+
+class TokenConf(_Model):
+    """Un token GitLab (Group, Project o Personal Access Token) e i path che copre.
+
+    Il valore sta nel file `secrets/gitlab_tokens/<name>` (o nella variabile d'ambiente
+    GITLAB_TOKEN_<NAME>), mai qui.
+    """
+
+    name: str = Field(pattern=r"^[a-z0-9-]+$", max_length=40)
+    # Prefissi di path: un gruppo, un sottogruppo o un progetto (es. `backend`, `alex/ecs2`)
+    scope: list[str] = Field(min_length=1)
+    bot_name: str | None = None  # nome dei commit; default: il nome dell'utente su GitLab
+
+    @field_validator("scope")
+    @classmethod
+    def _scope_format(cls, v: list[str]) -> list[str]:
+        bad = [p for p in v if not SCOPE_RE.match(p)]
+        if bad:
+            raise ValueError(f"scope deve contenere path GitLab (gruppo o gruppo/progetto): {bad}")
+        return v
+
+
 class GitLabConf(_Model):
     url: str = Field(pattern=r"^https://[^/\s]+(/[^\s]*)?$")
-    bot_username: str
-    bot_name: str = "Autofix Bot"
-    bot_email: str | None = None  # default: <bot_username>@noreply.<host di GitLab>
+    # Più token, uno per gruppo o progetto. Senza `tokens` vale il solo segreto `gitlab_token`
+    # per tutta l'istanza (configurazione delle versioni precedenti).
+    tokens: list[TokenConf] | None = Field(default=None, min_length=1)
+    # Identità dei commit: di norma si legge da GitLab (utente del token). Questi campi la
+    # forzano, e valgono solo per il token unico `gitlab_token`.
+    bot_username: str | None = None
+    bot_name: str | None = None
+    bot_email: str | None = None
     # CA interna per un GitLab self-hosted con certificato non pubblico: usata da API, git e
     # login OIDC della dashboard. Il sandbox non la riceve (e non raggiunge GitLab).
     ca_bundle: Path | None = None
 
-    def commit_email(self) -> str:
-        host = self.url.split("://", 1)[1].split("/", 1)[0]
-        return self.bot_email or f"{self.bot_username}@noreply.{host}"
+    @model_validator(mode="after")
+    def _check_tokens(self) -> Self:
+        if self.tokens is None:
+            return self
+        names = [t.name for t in self.tokens]
+        dupes = sorted({n for n in names if names.count(n) > 1})
+        if dupes:
+            raise ValueError(f"gitlab.tokens: nomi duplicati {dupes}")
+        prefixes = [p for t in self.tokens for p in t.scope]
+        same = sorted({p for p in prefixes if prefixes.count(p) > 1})
+        if same:
+            raise ValueError(f"gitlab.tokens: lo stesso prefisso in più token {same}")
+        return self
+
+    @property
+    def host(self) -> str:
+        return self.url.split("://", 1)[1].split("/", 1)[0]
+
+    def token_scopes(self) -> dict[str, tuple[str, ...]]:
+        if self.tokens is None:
+            return {LEGACY_TOKEN: ("",)}
+        return {t.name: tuple(t.scope) for t in self.tokens}
+
+    def secret_hint(self, token: str) -> str:
+        """Dove mettere il valore del token, per i messaggi d'errore."""
+        if self.tokens is None:
+            return "/run/secrets/gitlab_token o GITLAB_TOKEN"
+        env = f"GITLAB_TOKEN_{token}".upper().replace("-", "_")
+        return f"secrets/gitlab_tokens/{token} o {env}"
+
+    def name_override(self, token: str) -> str | None:
+        if self.tokens is None:
+            return self.bot_name
+        return next((t.bot_name for t in self.tokens if t.name == token), None)
+
+    def email_override(self) -> str | None:
+        """Solo per il token unico: email esplicita, o noreply dello username indicato."""
+        if self.tokens is not None:
+            return None
+        if self.bot_email:
+            return self.bot_email
+        return f"{self.bot_username}@noreply.{self.host}" if self.bot_username else None
 
 
 class SandboxConf(_Model):
@@ -264,6 +335,10 @@ class AppConfig(_Model):
         dupes = {p for p in projects if projects.count(p) > 1}
         if dupes:
             raise ValueError(f"repo duplicati: {sorted(dupes)}")
+        scopes = self.gitlab.token_scopes()
+        uncovered = [r.project for r in self.repos if resolve_token(r.project, scopes) is None]
+        if uncovered:
+            raise ValueError(f"repo non coperti da nessun token in gitlab.tokens: {uncovered}")
         if self.budget.per_task_usd > self.budget.per_night_usd:
             raise ValueError("per_task_usd non può superare per_night_usd")
         return self
@@ -339,6 +414,27 @@ class Secrets(BaseSettings):
 
 
 SECRETS_DIR = Path("/run/secrets")
+
+
+TOKENS_DIR = "gitlab_tokens"
+
+
+def read_token_secret(
+    name: str, secrets_dir: Path = SECRETS_DIR, environ: Mapping[str, str] | None = None
+) -> str | None:
+    """Valore del token `name` di gitlab.tokens, nell'ordine:
+    - file `gitlab_tokens/<name>` nella directory dei segreti (il compose la monta da
+      `./secrets/gitlab_tokens`: un file per token, senza toccare il compose);
+    - Docker secret `gitlab_token_<name>`;
+    - variabile d'ambiente GITLAB_TOKEN_<NAME> (`-` diventa `_`)."""
+    for path in (secrets_dir / TOKENS_DIR / name, secrets_dir / f"gitlab_token_{name}"):
+        if path.is_file():
+            value = path.read_text(encoding="utf-8").strip()
+            if value:
+                return value
+    env = os.environ if environ is None else environ
+    value = env.get(f"GITLAB_TOKEN_{name}".upper().replace("-", "_"), "").strip()
+    return value or None
 
 
 def load_secrets(secrets_dir: Path = SECRETS_DIR) -> Secrets:

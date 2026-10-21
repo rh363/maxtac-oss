@@ -25,6 +25,7 @@ from maxtac.adapters.sqlite_store import (
     SqliteRepoRegistry,
     SqliteRunStore,
     SqliteStore,
+    SqliteTokenRegistry,
     connect_readonly,
 )
 from maxtac.config import AppConfig, Secrets, WebConf
@@ -225,6 +226,7 @@ def service(request: Request) -> Iterator[DashboardService]:
             schedule_tz=cfg.schedule.timezone,
             registry=SqliteRepoRegistry(conn) if _has_table(conn, "repo_proposals") else None,
             config_projects=frozenset(r.project for r in cfg.repos),
+            token_scopes=cfg.gitlab.token_scopes(),
         )
     finally:
         conn.close()
@@ -382,7 +384,12 @@ def _routes(app: FastAPI) -> None:
     @app.get("/api/settings", response_model=SettingsOut)
     def settings(request: Request, user: User) -> SettingsOut:
         st = _state(request)
-        return settings_view(st.cfg, st.clock())
+        conn = st.db_connect()
+        try:
+            tokens = SqliteTokenRegistry(conn).tokens()
+        finally:
+            conn.close()
+        return settings_view(st.cfg, st.clock(), tokens)
 
     @app.get("/api/runs", response_model=RunList)
     def runs(

@@ -111,6 +111,15 @@ test('repository attivi e proposte dell autodiscovery, senza scritture', async (
 	await expect(
 		table.getByRole('row').filter({ hasText: 'alex/ecs2' }).getByText('config.yaml')
 	).toBeVisible();
+	// token per repo: il prefisso più specifico vince
+	await expect(
+		table.getByRole('row').filter({ hasText: 'alex/oidc-admin' }).getByText('oidc-admin', {
+			exact: true
+		})
+	).toBeVisible();
+	await expect(
+		table.getByRole('row').filter({ hasText: 'alex/fwagent' }).getByText('alex', { exact: true })
+	).toBeVisible();
 
 	const proposals = page.getByTestId('proposal');
 	await expect(proposals).toHaveCount(5); // 3 in attesa, 1 sostituita, 1 rifiutata
@@ -137,7 +146,13 @@ test('impostazioni in sola lettura, senza utenti né temi', async ({ page }) => 
 	await expect(page.getByTestId('features')).toContainText('Bug hunting');
 	await expect(page.getByTestId('prices').getByRole('row')).toHaveCount(4);
 	await expect(page.getByText('claude-sonnet-5-5').first()).toBeVisible();
+	const tokens = page.getByTestId('tokens');
+	await expect(tokens.getByRole('row')).toHaveCount(3);
+	const expiring = tokens.getByRole('row').filter({ hasText: 'oidc-admin' });
+	await expect(expiring.getByText('Scade a breve')).toBeVisible();
+	await expect(expiring.getByText('project_88_bot_c41e')).toBeVisible();
 	const main = (await page.locator('main').textContent()) ?? '';
+	expect(main).not.toMatch(/glpat-/);
 	expect(main).not.toMatch(/allowed|boss|tema|theme/i);
 	expect(w.problems).toEqual([]);
 });

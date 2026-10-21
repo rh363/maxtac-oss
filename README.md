@@ -17,7 +17,7 @@ La documentazione tecnica (architettura, sicurezza, configurazione completa, svi
   `api.anthropic.com`.
 - Una **chiave API Anthropic**, possibilmente senza ricarica automatica del credito: a crediti
   finiti Autofix si ferma da solo fino al mese dopo.
-- Un **token GitLab**: come ottenerlo senza essere admin è spiegato al passo 2.
+- Uno o più **token GitLab**: come ottenerli senza essere admin è spiegato al passo 2.
 - Per la dashboard (facoltativa): un nome a dominio e un reverse proxy con TLS davanti.
 
 ## Installazione
@@ -33,7 +33,7 @@ mkdir -p secrets && chmod 700 secrets
 
 `/var/lib/autofix` contiene il database e le copie di lavoro dei repo.
 
-### 2. Crea il token GitLab
+### 2. Crea i token GitLab
 
 Non servono permessi di admin. Le strade sono due.
 
@@ -43,22 +43,25 @@ risultano aperte dal bot e non da te.
 
 1. Apri il gruppo (o il progetto), poi **Settings → Access tokens → Add new token**.
 2. Ruolo **Developer**, scope **`api`**, una scadenza (per esempio un anno).
-3. Copia il token e annota lo username del bot che GitLab mostra (tipo `group_123_bot_…`).
+3. Copia il token.
 
 Con il ruolo Developer il bot non può unire MR né scrivere sui branch protetti. Un Group
-Access Token vale per tutti i progetti del gruppo. **Oggi Autofix usa un solo token**: tieni i
-repo da controllare nello stesso gruppo, oppure usa un Project Access Token se il repo è uno
-solo. Se la voce "Access tokens" non compare, l'admin dell'istanza l'ha disattivata: chiedi di
-abilitarla oppure usa la strada B.
+Access Token vale per tutti i progetti del gruppo e dei sottogruppi; un Project Access Token
+per un solo progetto, anche nel tuo namespace personale. **Puoi usarne quanti vuoi**: uno per
+ogni gruppo o progetto da controllare. Se la voce "Access tokens" non compare, l'admin
+dell'istanza l'ha disattivata: chiedi di abilitarla oppure usa la strada B.
 
 **B. Personal Access Token (ripiego).** **User Settings → Access tokens**, scope `api`, con
 una scadenza. Funziona subito, ma MR e commit risultano tuoi e il token ha **tutti i tuoi
 permessi** su GitLab, merge compreso. Usalo per una prova, non come soluzione definitiva.
 
-Salva il token:
+Salva ogni token in un file dentro `secrets/gitlab_tokens/`, con un nome breve a tua scelta
+(minuscole, cifre e trattini). Lo stesso nome lo userai nella configurazione al passo 4.
 
 ```bash
-printf '%s' 'IL-TUO-TOKEN' > secrets/gitlab_token
+mkdir -p secrets/gitlab_tokens && chmod 700 secrets
+printf '%s' 'TOKEN-DEL-GRUPPO'   > secrets/gitlab_tokens/backend    # Group Access Token del gruppo backend
+printf '%s' 'TOKEN-DEL-PROGETTO' > secrets/gitlab_tokens/tools      # Project Access Token di alice/tools
 ```
 
 ### 3. Salva la chiave Anthropic
@@ -81,8 +84,11 @@ Per partire bastano questi campi; tutto il resto ha già un valore sensato.
 ```yaml
 gitlab:
   url: https://gitlab.example.it        # indirizzo della tua istanza
-  bot_username: group_123_bot_abc       # lo username del bot (o il tuo, con il token personale)
-  bot_name: Autofix                     # nome usato nei commit
+  tokens:                               # un elemento per ogni file in secrets/gitlab_tokens/
+    - name: backend
+      scope: [backend]                  # tutto il gruppo backend, sottogruppi compresi
+    - name: tools
+      scope: [alice/tools]              # un solo progetto, anche personale
 
 schedule:
   timezone: Europe/Rome
@@ -99,6 +105,9 @@ features:                               # si attivano un po' alla volta (vedi "P
 
 repos: []                               # vuoto: i repo si aggiungono con l'autodiscovery
 ```
+
+Ogni repo usa il token che lo copre in modo più specifico. Lo username del bot e il nome dei
+commit li legge Autofix da GitLab: non serve scriverli.
 
 Il file `config.yaml` resta sulla VM e non va committato: contiene, per esempio, l'elenco
 delle persone che possono entrare nella dashboard.
@@ -142,7 +151,7 @@ Per ogni repo Autofix deve sapere quali linguaggi usa, come si installano le dip
 si lanciano i test. Non serve scriverlo a mano:
 
 ```bash
-autofix repos discover --all     # analizza tutti i progetti che il token vede
+autofix repos discover --all     # analizza tutti i progetti che i token vedono
 autofix repos list               # elenco: attivi e proposte in attesa
 autofix repos show team/api      # dettaglio di una proposta
 ```
@@ -217,7 +226,8 @@ Comandi utili:
 
 | Comando | Cosa fa |
 | --- | --- |
-| `autofix status` | spesa del mese e proiezione, problemi trovati per stato, MR aperte, ultime run |
+| `autofix status` | spesa del mese e proiezione, problemi trovati per stato, MR aperte, ultime run, scadenza dei token |
+| `autofix tokens` | ricontrolla subito i token GitLab: utente, permessi e scadenza |
 | `autofix run --dry-run` | una run subito, senza creare MR |
 | `autofix run --repo team/api` | una run vera subito, solo su quel repo |
 | `autofix run --scan-only` | solo gli scanner, gratis |
@@ -331,8 +341,13 @@ dell'installazione.
 ha giudicati falsi positivi o se i fix non hanno superato la verifica. Il motivo è nel report
 della notte (`autofix status`, dashboard o `report.md`).
 
-**Il token è scaduto.** Le run falliscono con un errore di autenticazione su GitLab: crea un
-token nuovo (passo 2), sovrascrivi `secrets/gitlab_token` e riavvia con `docker compose restart orchestrator`.
+**Il token è scaduto o sta per scadere.** `autofix status` e la pagina Impostazioni della
+dashboard avvisano un mese prima. Crea un token nuovo (passo 2), sovrascrivi il suo file in
+`secrets/gitlab_tokens/` e controlla con `autofix tokens`. Un token non valido ferma solo i
+repo che copre.
+
+**Un repo risulta "non coperto da nessun token".** Aggiungi in `gitlab.tokens` un token il cui
+`scope` contenga il gruppo o il progetto, e il file con il suo valore in `secrets/gitlab_tokens/`.
 
 **Un repo non viene mai controllato.** Controlla con `autofix repos list` che sia attivo: le
 proposte dell'autodiscovery restano ferme finché non le approvi.

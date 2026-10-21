@@ -68,6 +68,8 @@
 		</dd>
 		<dt class="text-muted">{t('proposal.cost')}</dt>
 		<dd class="mono m-0">{money(p.cost_usd)}</dd>
+		<dt class="text-muted">{t('field.token')}</dt>
+		<dd class="mono m-0 break-all">{p.token ?? t('token.none')}</dd>
 		<dt class="text-muted">{t('proposal.rationale')}</dt>
 		<dd class="m-0 break-words">{p.rationale}</dd>
 	</dl>

@@ -9,6 +9,7 @@ che produce il modello che lo ha letto.
 | Rischio | Contromisura |
 | --- | --- |
 | Esfiltrazione di chiave API o token GitLab | Solo nell'orchestrator (Docker secret); mai nel sandbox, in argv, nell'URL del remoto o nei log |
+| Un token usato fuori dal suo perimetro | Con più token ogni repo usa solo quello col prefisso di path più specifico che lo copre, scelto dalla config e mai dal contenuto del repo; un repo non coperto non arriva a GitLab. Token, client API e header git sono separati per token. La dashboard e `status` vedono solo nome, scope, utente e scadenza, mai i valori |
 | Code execution nell'orchestrator via git | Git dir separata e non montata, `.git` (file o directory) nella working tree eliminato prima di ogni comando, hooks/fsmonitor/filtri/protocolli non https disattivati, config globale ignorata |
 | Quick action GitLab (`/merge`, `/approve`) e menzioni nella MR | Campi non fidati su una riga con `\|` e backtick neutralizzati; motivazioni, riassunto e output dei test in blocchi di codice; nessuna riga della descrizione può iniziare con `/`; `@` neutralizzato |
 | Agente che bara sui test | Per CVE e SAST nessun file di test toccabile (nemmeno aggiunto); config di CI, test runner e scanner protetta ovunque nel repo; `pyproject.toml`/`package.json` ammessi per le CVE solo se non cambiano le sezioni di test e scanner; symlink e submodule sempre a un umano |
@@ -42,6 +43,8 @@ Accettati e da rivalutare:
 - **Token GitLab personale.** Con un Personal Access Token al posto di un token di gruppo o
   progetto (ruolo Developer), il token ha tutti i permessi dell'utente, merge compreso. Le
   difese contro le quick action restano attive, ma il raggio d'azione è molto più ampio.
+  Con più token conviene un Group o Project Access Token per ogni perimetro: un token
+  compromesso espone solo i repo del suo gruppo o progetto.
 - L'euristica sui test di regressione è aggirabile da un attaccante determinato: per questo
   ogni MR di bug resta da rivedere con particolare attenzione al test aggiunto.
 

@@ -845,6 +845,18 @@
             "description": "Non fidato: proposto dal contenuto del repo",
             "title": "Test Command",
             "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nome del token GitLab che userebbe il repo",
+            "title": "Token"
           }
         },
         "required": [
@@ -864,6 +876,7 @@
           "blockers",
           "created_at",
           "approve_command",
+          "token",
           "changes"
         ],
         "title": "ProposalOut",
@@ -962,6 +975,18 @@
           "test_command": {
             "title": "Test Command",
             "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nome del token GitLab che copre il repo; null: nessuno",
+            "title": "Token"
           }
         },
         "required": [
@@ -977,7 +1002,8 @@
           "rotation",
           "next_up",
           "findings_by_status",
-          "open_mrs"
+          "open_mrs",
+          "token"
         ],
         "title": "RepoOut",
         "type": "object"
@@ -1295,6 +1321,13 @@
           "schedule": {
             "$ref": "#/components/schemas/ScheduleOut"
           },
+          "tokens": {
+            "items": {
+              "$ref": "#/components/schemas/TokenOut"
+            },
+            "title": "Tokens",
+            "type": "array"
+          },
           "vcs": {
             "$ref": "#/components/schemas/VCSOut"
           }
@@ -1307,6 +1340,7 @@
           "limits",
           "hunting",
           "vcs",
+          "tokens",
           "prices"
         ],
         "title": "SettingsOut",
@@ -1530,6 +1564,84 @@
           "findings"
         ],
         "title": "TaskOut",
+        "type": "object"
+      },
+      "TokenOut": {
+        "description": "Un token GitLab all'ultimo controllo dell'orchestrator. Mai il valore.",
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Prefissi di path coperti; vuoto: tutta l'istanza",
+            "items": {
+              "type": "string"
+            },
+            "title": "Scope",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "ok",
+              "expiring",
+              "expired",
+              "unknown",
+              "error"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "name",
+          "scope",
+          "username",
+          "expires_at",
+          "state",
+          "error",
+          "checked_at"
+        ],
+        "title": "TokenOut",
         "type": "object"
       },
       "TriagedOut": {

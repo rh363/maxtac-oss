@@ -52,8 +52,8 @@ def test_bad_project_rejected(tmp_path, project):
 
 def test_subgroups_allowed(tmp_path):
     data = raw()
-    data["repos"][0]["project"] = "seeweb/team/ecs2"
-    assert load_config(write(tmp_path, data)).repos[0].project == "seeweb/team/ecs2"
+    data["repos"][0]["project"] = "team/backend/ecs2"  # coperto dal token `team`
+    assert load_config(write(tmp_path, data)).repos[0].project == "team/backend/ecs2"
 
 
 def test_empty_repos_allowed_unknown_keys_rejected(tmp_path):
@@ -83,7 +83,13 @@ def test_secrets_from_dir(tmp_path):
 
 def test_phase1_sections_defaults_and_validation(tmp_path):
     cfg = load_config(EXAMPLE)
-    assert cfg.gitlab.commit_email() == "autofix-bot@noreply.gitlab.example.it"
+    assert cfg.gitlab.email_override() is None  # più token: identità letta da GitLab
+    legacy = raw()
+    legacy["gitlab"] = {"url": "https://gitlab.example.it", "bot_username": "autofix-bot"}
+    assert (
+        load_config(write(tmp_path, legacy)).gitlab.email_override()
+        == "autofix-bot@noreply.gitlab.example.it"
+    )
     assert cfg.sandbox.user == "1000:1000" and cfg.sandbox.network == "autofix_sandbox"
     assert cfg.semgrep_rulesets() == ["p/default", "p/golang", "p/python"]
     for bad in ({"user": "0:0"}, {"user": "root"}, {"mem_limit": "lots"}):

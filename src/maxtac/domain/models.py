@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from enum import IntEnum, StrEnum
 from pathlib import Path
 from typing import Any, Literal
@@ -386,3 +386,16 @@ class SpendEntry:
     at: datetime
     scope: str  # categoria:repo[:task], es. fix:alex__ecs2:3f2a...
     usd: float
+
+
+@dataclass(frozen=True)
+class TokenInfo:
+    """Stato di un token GitLab come visto all'ultimo controllo. Mai il valore del token."""
+
+    name: str
+    scope: tuple[str, ...]  # prefissi di path GitLab; ("",) = tutta l'istanza
+    checked_at: datetime
+    username: str | None = None  # utente (bot) a cui appartiene il token
+    expires_at: date | None = None  # None: senza scadenza o non leggibile
+    scopes: tuple[str, ...] | None = None  # scope del token, None se non leggibili
+    error: str | None = None  # ultimo controllo fallito (token revocato, rete...)

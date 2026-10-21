@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,7 @@ from maxtac.domain.models import (
     RunSummary,
     Severity,
     SpendEntry,
+    TokenInfo,
 )
 from maxtac.domain.serialize import report_to_dict
 
@@ -99,6 +100,15 @@ CREATE TABLE IF NOT EXISTS repos (
     approved_at TEXT NOT NULL,
     approved_by TEXT NOT NULL,
     proposal_id INTEGER
+);
+CREATE TABLE IF NOT EXISTS gitlab_tokens (
+    name TEXT PRIMARY KEY,
+    scope TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    username TEXT,
+    expires_at TEXT,
+    scopes TEXT,
+    error TEXT
 );
 """
 
@@ -559,3 +569,53 @@ class SqliteRepoRegistry:
 
     def approved_repos(self) -> list[ApprovedRepo]:
         return [self._approved(r) for r in self._db.execute("SELECT * FROM repos ORDER BY project")]
+
+
+class SqliteTokenRegistry:
+    """Ultimo stato noto dei token GitLab, per `status` e per la dashboard (che non ha token)."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._db = conn
+
+    def save_tokens(self, infos: Sequence[TokenInfo]) -> None:
+        """Sostituisce l'elenco: i token tolti dalla config spariscono anche da qui."""
+        self._db.execute("BEGIN")
+        try:
+            self._db.execute("DELETE FROM gitlab_tokens")
+            self._db.executemany(
+                "INSERT INTO gitlab_tokens VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        t.name,
+                        json.dumps(list(t.scope)),
+                        _iso(t.checked_at),
+                        t.username,
+                        t.expires_at.isoformat() if t.expires_at else None,
+                        None if t.scopes is None else json.dumps(list(t.scopes)),
+                        t.error,
+                    )
+                    for t in infos
+                ],
+            )
+            self._db.execute("COMMIT")
+        except BaseException:
+            self._db.execute("ROLLBACK")
+            raise
+
+    def tokens(self) -> list[TokenInfo]:
+        try:
+            rows = self._db.execute("SELECT * FROM gitlab_tokens ORDER BY name").fetchall()
+        except sqlite3.OperationalError:  # db di una versione precedente, aperto in sola lettura
+            return []
+        return [
+            TokenInfo(
+                name=r["name"],
+                scope=tuple(json.loads(r["scope"])),
+                checked_at=datetime.fromisoformat(r["checked_at"]),
+                username=r["username"],
+                expires_at=date.fromisoformat(r["expires_at"]) if r["expires_at"] else None,
+                scopes=None if r["scopes"] is None else tuple(json.loads(r["scopes"])),
+                error=r["error"],
+            )
+            for r in rows
+        ]

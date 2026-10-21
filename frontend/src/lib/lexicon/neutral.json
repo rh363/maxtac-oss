@@ -15,7 +15,6 @@
 	"notFound": "Non trovato",
 	"back": "Indietro",
 	"costTip": "",
-
 	"dash.title": "Panoramica",
 	"dash.subtitle": "Run notturna e crediti API",
 	"kpi.month": "Spesa del mese",
@@ -46,12 +45,10 @@
 	"run.state.dry": "Dry-run",
 	"run.state.aborted": "Interrotta",
 	"empty.runs": "Nessuna run ancora.",
-
 	"status.new": "Nuovi",
 	"status.mr_open": "MR aperta",
 	"status.needs_human": "Da rivedere",
 	"status.ignored": "Ignorati",
-
 	"outcome.mr_opened": "MR aperta",
 	"outcome.dry_run": "Dry-run",
 	"outcome.needs_human": "Da rivedere",
@@ -60,7 +57,6 @@
 	"outcome.budget_exhausted": "Budget esaurito",
 	"outcome.error": "Errore",
 	"outcome.ignored": "Ignorato",
-
 	"find.title": "Finding",
 	"find.subtitle": "Tutti i finding rilevati dagli scanner e dal bug hunting",
 	"filters": "Filtri",
@@ -81,7 +77,6 @@
 	"pager.prev": "Precedenti",
 	"pager.next": "Successivi",
 	"empty.findings": "Nessun finding con questi filtri.",
-
 	"runs.title": "Run notturne",
 	"runs.subtitle": "Storico delle run, dalla più recente",
 	"run.title": "Run del {date}",
@@ -102,7 +97,6 @@
 	"run.errors": "Errori",
 	"run.noTasks": "Nessun task per questo repository.",
 	"run.hunted": "bug hunting",
-
 	"task.subtitle": "{repo} · {kind}",
 	"kind.cve": "CVE nelle dipendenze",
 	"kind.sast": "Finding SAST",
@@ -137,14 +131,11 @@
 	"cost.task": "Costo del task",
 	"cost.note": "Triage e verifica sono contati a livello di run",
 	"total": "Totale",
-
 	"nav.repos": "Repository",
 	"nav.settings": "Impostazioni",
-
 	"find.search": "Cerca",
 	"find.searchHint": "Regola, file, package o tool",
 	"find.searchClear": "Azzera la ricerca",
-
 	"spend.title": "Spesa giornaliera",
 	"tag.spend": "",
 	"spend.sub": "Ultimi {days} giorni · tetto per notte {cap}",
@@ -160,7 +151,6 @@
 	"spend.table": "Dati del grafico",
 	"spend.day": "Giorno",
 	"spend.empty": "Nessuna spesa registrata in questo periodo.",
-
 	"col.iterations": "Passi",
 	"run.steps": "{n} passi",
 	"task.agent": "Agente",
@@ -171,7 +161,6 @@
 	"stop.max_tokens": "risposta troppo lunga",
 	"stop.refusal": "rifiuto del modello",
 	"stop.other": "interrotto",
-
 	"repos.title": "Repository",
 	"repos.subtitle": "Repository controllati ogni notte e proposte dell'autodiscovery",
 	"repos.active": "Repository attivi",
@@ -214,7 +203,6 @@
 	"field.languages": "Linguaggi",
 	"field.setup_command": "Setup",
 	"field.test_command": "Test",
-
 	"settings.title": "Impostazioni",
 	"settings.subtitle": "Configurazione effettiva dell'orchestrator, in sola lettura",
 	"settings.readonly": "Si cambiano in config.yaml sulla VM; qui non si modifica nulla.",
@@ -256,5 +244,21 @@
 	"price.input": "Input",
 	"price.output": "Output",
 	"price.cacheRead": "Cache, lettura",
-	"price.cacheWrite": "Cache, scrittura"
+	"price.cacheWrite": "Cache, scrittura",
+	"settings.tokens": "Token GitLab",
+	"settings.tokensSub": "Stato all'ultimo controllo dell'orchestrator (a ogni run o con il comando autofix tokens). I valori dei token non escono mai dall'orchestrator.",
+	"token.name": "Nome",
+	"token.scope": "Copre",
+	"token.scopeAll": "tutta l'istanza",
+	"token.user": "Utente",
+	"token.expires": "Scadenza",
+	"token.state": "Stato",
+	"token.checked": "Ultimo controllo",
+	"token.ok": "Valido",
+	"token.expiring": "Scade a breve",
+	"token.expired": "Scaduto",
+	"token.unknown": "Non verificato",
+	"token.error": "Errore",
+	"field.token": "Token",
+	"token.none": "nessuno: va aggiunto a gitlab.tokens"
 }

@@ -3,6 +3,15 @@
 	import { Async, Badge, PageHeader, SectionTitle } from '$lib/svelte/component';
 	import { t } from '$lib/lexicon/index.svelte';
 	import { money, when } from '$lib/format';
+	import type { Tone } from '$lib/tones';
+
+	const TOKEN_TONE: Record<string, Tone> = {
+		ok: 'good',
+		expiring: 'warn',
+		expired: 'bad',
+		unknown: 'idle',
+		error: 'bad'
+	};
 
 	let nonce = $state(0);
 	const promise = $derived.by<Promise<Settings>>(() => {
@@ -100,6 +109,47 @@
 				</section>
 			{/each}
 		</div>
+
+		<section class="card">
+			<div class="border-line flex flex-col gap-1 border-b px-5 py-4">
+				<SectionTitle>{t('settings.tokens')}</SectionTitle>
+				<span class="text-muted text-[13px]">{t('settings.tokensSub')}</span>
+			</div>
+			<div class="overflow-x-auto">
+				<table class="w-full min-w-[640px] border-collapse text-[13px]" data-testid="tokens">
+					<thead>
+						<tr>
+							<th class="th px-5 py-2.5">{t('token.name')}</th>
+							<th class="th px-3 py-2.5">{t('token.scope')}</th>
+							<th class="th px-3 py-2.5">{t('token.user')}</th>
+							<th class="th px-3 py-2.5">{t('token.expires')}</th>
+							<th class="th px-5 py-2.5">{t('token.state')}</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each s.tokens as tok (tok.name)}
+							<tr class="border-line border-t align-top">
+								<td class="mono px-5 py-2.5 font-semibold">{tok.name}</td>
+								<td class="mono px-3 py-2.5 break-all">
+									{tok.scope.length ? tok.scope.join(', ') : t('token.scopeAll')}
+								</td>
+								<td class="mono px-3 py-2.5 break-all">{tok.username ?? '—'}</td>
+								<td class="mono px-3 py-2.5">{tok.expires_at ?? '—'}</td>
+								<td class="px-5 py-2.5">
+									<Badge tone={TOKEN_TONE[tok.state] ?? 'idle'}>{t(`token.${tok.state}`)}</Badge>
+									{#if tok.error}
+										<div class="text-muted mt-1 text-xs break-words">{tok.error}</div>
+									{/if}
+									<div class="text-muted mt-1 text-xs">
+										{t('token.checked')}: {when(tok.checked_at)}
+									</div>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		</section>
 
 		<section class="card">
 			<div class="border-line border-b px-5 py-4">

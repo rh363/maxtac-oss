@@ -69,4 +69,5 @@ def test_scan_only_without_token_fails_clearly(
 ) -> None:
     monkeypatch.delenv("GITLAB_TOKEN", raising=False)
     code = cli.main(["--config", str(_config(tmp_path)), "run", "--scan-only"])
-    assert code == 2 and "token GitLab mancante" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert code == 2 and "token GitLab team mancante" in err

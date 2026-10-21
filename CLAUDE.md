@@ -15,6 +15,9 @@ ci si ferma e si riassume.
   docker exec. Il loop vive in `services/ripperdoc.py`, l'adapter fa un passo alla volta.
 - Git dir separata dalla working tree, hooks e fsmonitor disattivati: ogni comando git passa
   da `adapters/gitlab_vcs.Git`. Il token mai in argv, URL o log.
+- Più token GitLab: ogni repo usa solo il token scelto da `policy.resolve_token` (prefisso di
+  path più specifico, dalla config, mai dal repo), tramite `GitLabRouter`. Dashboard e
+  `status` vedono solo `TokenInfo` (nome, scope, utente, scadenza), mai i valori.
 - Il sandbox legge e scrive file solo da dentro il container (mai dall'host: i symlink del repo
   potrebbero puntare ai file dell'orchestrator).
 - Verifica indipendente sulla fotografia git del fix (`snapshot`/`materialize`): test in un

@@ -255,7 +255,19 @@ def test_settings_show_effective_config_without_secrets_or_users(cfg, alex):
         "claude-sonnet-5-5",
         "claude-opus-5-5",
     }
-    blob = r.text.lower()
+    # dei token GitLab solo nome e stato, mai valori (qui: token unico, mai controllato)
+    assert s["tokens"] == [
+        {
+            "name": "default",
+            "scope": [],
+            "username": None,
+            "expires_at": None,
+            "state": "unknown",
+            "error": None,
+            "checked_at": s["tokens"][0]["checked_at"],
+        }
+    ]
+    blob = r.text.lower().replace('"tokens"', "")
     for leak in ("alex", "boss", "theme", "allowed", "secret", "token", str(cfg.workdir).lower()):
         assert leak not in blob, leak
     assert "gitlab.example.it" not in blob
@@ -274,3 +286,45 @@ def test_new_endpoints_require_login(cfg, idp):
     c = make_client(cfg, idp)
     for path in ("/api/repos", "/api/settings", "/api/spend/daily"):
         assert c.get(path).status_code == 401
+
+
+def test_settings_and_repos_show_token_names_and_state_only(cfg, alex):
+    from maxtac.adapters.sqlite_store import SqliteTokenRegistry, connect
+    from maxtac.domain.models import TokenInfo
+
+    conn = connect(cfg.db_path)
+    SqliteTokenRegistry(conn).save_tokens(
+        [
+            TokenInfo(
+                "default",
+                ("",),
+                datetime(2026, 10, 19, tzinfo=UTC),
+                "bot_x",
+                date(2026, 11, 1),
+                ("api",),
+                error=None,
+            )
+        ]
+    )
+    conn.close()
+    t = alex.get("/api/settings").json()["tokens"]
+    assert t[0]["state"] == "expiring" and t[0]["username"] == "bot_x"
+    assert t[0]["expires_at"] == "2026-11-01"
+    repos = alex.get("/api/repos").json()
+    assert {r["token"] for r in repos["repos"]} == {"default"}
+
+
+def test_token_errors_never_show_gitlab_url(cfg, alex):
+    from maxtac.adapters.sqlite_store import SqliteTokenRegistry, connect
+    from maxtac.domain.models import TokenInfo
+
+    conn = connect(cfg.db_path)
+    err = f"token default: ConnectionError: {cfg.gitlab.url}/api/v4/user timeout"
+    SqliteTokenRegistry(conn).save_tokens(
+        [TokenInfo("default", ("",), datetime(2026, 10, 19, tzinfo=UTC), error=err)]
+    )
+    conn.close()
+    r = alex.get("/api/settings")
+    t = r.json()["tokens"][0]
+    assert t["state"] == "error" and "GitLab/api/v4/user" in t["error"]
+    assert cfg.gitlab.host not in r.text

@@ -7,7 +7,26 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ## [Unreleased]
 
+### Added
+
+- Più token GitLab: `gitlab.tokens` con un nome e i prefissi di path coperti (gruppo,
+  sottogruppo o progetto); ogni repo usa il token con il prefisso più specifico. I valori
+  stanno in `secrets/gitlab_tokens/<nome>` (montata dal compose) o in `GITLAB_TOKEN_<NOME>`.
+- Utente e identità dei commit letti da GitLab per ogni token (`GET /user`), con controllo di
+  scope e scadenza (`GET /personal_access_tokens/self`) a ogni run e con `autofix tokens`.
+- Stato dei token (nome, scope, utente, scadenza, mai i valori) in `autofix status` e nella
+  pagina Impostazioni della dashboard, con avviso 30 giorni prima della scadenza; token usato
+  da ogni repo e proposta nella pagina Repository e in `autofix repos list/show`.
+- `autofix schedule` (lo scheduler; il vecchio nome resta accettato ma non è più documentato).
+
 ### Changed
+
+- Un repo del `config.yaml` non coperto da nessun token blocca l'avvio; uno approvato viene
+  saltato con il motivo nel report e `repos approve` lo rifiuta. Un token non valido ferma solo
+  i repo che copre.
+- `bot_username`, `bot_name` e `bot_email` valgono solo senza `tokens` (configurazione a
+  token unico, ancora supportata).
+- `scripts/pin-digests.sh` pinna anche le immagini di `Dockerfile.web`.
 
 - Documentazione riorganizzata: il README spiega come si installa e come si usa (requisiti,
   token GitLab senza admin, Application OIDC, primo utilizzo, uso quotidiano, costi,

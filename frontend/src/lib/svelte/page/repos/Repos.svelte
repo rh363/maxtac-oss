@@ -68,6 +68,11 @@
 											<dd class="mono m-0 break-all">{r.setup_command ?? '—'}</dd>
 											<dt class="text-muted">{t('field.test')}</dt>
 											<dd class="mono m-0 break-all">{r.test_command}</dd>
+											<dt class="text-muted">{t('field.token')}</dt>
+											<dd class="mono m-0 break-all">
+												{#if r.token}{r.token}{:else}<Badge tone="bad">{t('token.none')}</Badge
+													>{/if}
+											</dd>
 										</dl>
 									</td>
 									<td class="px-3 py-3 text-[13px]">

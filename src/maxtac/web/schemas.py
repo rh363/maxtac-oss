@@ -227,6 +227,7 @@ class RepoOut(_Out):
     next_up: bool
     findings_by_status: dict[str, int]
     open_mrs: int
+    token: str | None = Field(description="Nome del token GitLab che copre il repo; null: nessuno")
 
 
 class FieldChangeOut(_Out):
@@ -252,6 +253,7 @@ class ProposalOut(_Out):
     blockers: list[str]
     created_at: datetime
     approve_command: str | None
+    token: str | None = Field(description="Nome del token GitLab che userebbe il repo")
     changes: list[FieldChangeOut]
 
 
@@ -315,6 +317,21 @@ class PriceOut(_Out):
     cache_write: float
 
 
+TokenStateName = Literal["ok", "expiring", "expired", "unknown", "error"]
+
+
+class TokenOut(_Out):
+    """Un token GitLab all'ultimo controllo dell'orchestrator. Mai il valore."""
+
+    name: str
+    scope: list[str] = Field(description="Prefissi di path coperti; vuoto: tutta l'istanza")
+    username: str | None
+    expires_at: date | None
+    state: TokenStateName
+    error: str | None
+    checked_at: datetime
+
+
 class SettingsOut(_Out):
     schedule: ScheduleOut
     features: FeaturesOut
@@ -323,4 +340,5 @@ class SettingsOut(_Out):
     limits: LimitsOut
     hunting: HuntingOut
     vcs: VCSOut
+    tokens: list[TokenOut]
     prices: list[PriceOut]

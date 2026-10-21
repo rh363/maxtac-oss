@@ -88,7 +88,7 @@ src/maxtac/
 ├── web/           API e serving della dashboard (adapter driver)
 ├── config.py      YAML + Docker secret
 ├── container.py   composition root
-└── cli.py         run / patrol / status / repos / web
+└── cli.py         run / schedule / status / tokens / repos / web
 ```
 
 | Porta | Responsabilità |

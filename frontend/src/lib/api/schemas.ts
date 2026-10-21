@@ -202,7 +202,8 @@ export const RepoOut = z.object({
 	rotation: z.number().int(),
 	next_up: z.boolean(),
 	findings_by_status: z.record(z.string(), z.number().int()),
-	open_mrs: z.number().int()
+	open_mrs: z.number().int(),
+	token: z.string().nullable()
 });
 
 export const FieldChangeOut = z.object({
@@ -228,6 +229,7 @@ export const ProposalOut = z.object({
 	blockers: z.array(z.string()),
 	created_at: dt,
 	approve_command: z.string().nullable(),
+	token: z.string().nullable(),
 	changes: z.array(FieldChangeOut)
 });
 
@@ -266,6 +268,15 @@ export const PriceOut = z.object({
 	cache_read: z.number(),
 	cache_write: z.number()
 });
+export const TokenOut = z.object({
+	name: z.string(),
+	scope: z.array(z.string()),
+	username: z.string().nullable(),
+	expires_at: nullableDt, // data YYYY-MM-DD
+	state: z.enum(['ok', 'expiring', 'expired', 'unknown', 'error']),
+	error: z.string().nullable(),
+	checked_at: dt
+});
 export const SettingsOut = z.object({
 	schedule: ScheduleOut,
 	features: FeaturesOut,
@@ -274,6 +285,7 @@ export const SettingsOut = z.object({
 	limits: LimitsOut,
 	hunting: HuntingOut,
 	vcs: VCSOut,
+	tokens: z.array(TokenOut),
 	prices: z.array(PriceOut)
 });
 
@@ -314,6 +326,7 @@ export const CONTRACT = {
 	HuntingOut,
 	VCSOut,
 	PriceOut,
+	TokenOut,
 	SettingsOut
 } as const;
 

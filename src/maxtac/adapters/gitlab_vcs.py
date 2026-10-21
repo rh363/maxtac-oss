@@ -17,11 +17,14 @@ import logging
 import os
 import shutil
 import subprocess
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from maxtac.domain.models import Checkout, FileChange, RepoConfig
+from maxtac.domain.models import Checkout, FileChange, RepoConfig, TokenInfo
+from maxtac.domain.policy import covers, resolve_token
 
 log = logging.getLogger(__name__)
 
@@ -398,3 +401,169 @@ class GitLabVCS:
             "push", "--no-verify", "--force", "--no-recurse-submodules",
             self._remote_url(co.repo.project), f"HEAD:refs/heads/{branch}",
         )  # fmt: skip
+
+
+# --- più token: introspezione e routing per repo ---
+
+
+class RepoNotCovered(GitError):
+    """Nessun token copre il progetto: nessuna chiamata a GitLab, nessun token usato."""
+
+
+class TokenUnavailable(GitError):
+    """Il token che copre il progetto non è utilizzabile (revocato, scaduto, scope mancante)."""
+
+
+@dataclass(frozen=True)
+class BotIdentity:
+    username: str
+    name: str
+    email: str
+
+
+def _redact(text: str, secrets: Sequence[str]) -> str:
+    for s in secrets:
+        if s:
+            text = text.replace(s, "***")
+    return text
+
+
+def introspect_token(
+    name: str,
+    scope: Sequence[str],
+    client: Any,
+    url: str,
+    now: datetime,
+    *,
+    secrets: Sequence[str] = (),
+    name_override: str | None = None,
+    email_override: str | None = None,
+) -> tuple[TokenInfo, BotIdentity | None]:
+    """Chi è il token (`GET /user`) e quando scade (`GET /personal_access_tokens/self`).
+
+    Ritorna anche l'identità per i commit, o None se il token non è utilizzabile: in quel caso
+    `TokenInfo.error` spiega perché, nominando il token e mai il suo valore.
+    """
+    base = TokenInfo(name, tuple(scope), now)
+    try:
+        client.auth()
+        user = client.user
+    except Exception as e:  # 401, rete, TLS...
+        code = getattr(e, "response_code", None)
+        why = "non valido o revocato" if code == 401 else f"{type(e).__name__}: {e}"
+        msg = _redact(f"token {name}: {why}", secrets)
+        return replace(base, error=msg[:300]), None
+    username = str(user.username)
+    expires_at, scopes = None, None
+    try:
+        pat = client.http_get("/personal_access_tokens/self")
+        if isinstance(pat, dict):
+            if pat.get("expires_at"):
+                expires_at = date.fromisoformat(str(pat["expires_at"])[:10])
+            if isinstance(pat.get("scopes"), list):
+                scopes = tuple(str(s) for s in pat["scopes"])
+    except Exception as e:  # endpoint assente (GitLab vecchio), 403/404: scadenza ignota
+        log.info("token %s: scadenza non leggibile (%s)", name, getattr(e, "response_code", e))
+    info = replace(base, username=username, expires_at=expires_at, scopes=scopes)
+    if scopes is not None and "api" not in scopes:
+        return replace(info, error=f"token {name}: manca lo scope api"), None
+    host = url.split("://", 1)[1].split("/", 1)[0]
+    email = email_override or str(getattr(user, "public_email", "") or "")
+    ident = BotIdentity(
+        username=username,
+        name=name_override or str(getattr(user, "name", "") or username),
+        email=email or f"{username}@noreply.{host}",
+    )
+    return info, ident
+
+
+class GitLabRouter:
+    """VCSPort con un GitLabVCS per token: ogni repo usa solo il token che lo copre.
+
+    Il token si sceglie dal path del progetto (prefisso più specifico, vedi
+    `policy.resolve_token`), mai dal contenuto del repo.
+    """
+
+    def __init__(
+        self,
+        scopes: Mapping[str, Sequence[str]],
+        backends: Mapping[str, GitLabVCS | TokenUnavailable],
+    ) -> None:
+        self._scopes = {n: tuple(p) for n, p in scopes.items()}
+        self._backends = dict(backends)
+
+    def token_for(self, project: str) -> str | None:
+        return resolve_token(project, self._scopes)
+
+    def _for(self, project: str) -> GitLabVCS:
+        name = self.token_for(project)
+        if name is None:
+            raise RepoNotCovered(f"{project}: nessun token in gitlab.tokens copre questo progetto")
+        backend = self._backends[name]
+        if isinstance(backend, TokenUnavailable):
+            raise backend
+        return backend
+
+    def checkout(self, repo: RepoConfig, workdir: Path) -> Checkout:
+        return self._for(repo.project).checkout(repo, workdir)
+
+    def reset(self, co: Checkout) -> None:
+        self._for(co.repo.project).reset(co)
+
+    def start_branch(self, co: Checkout, branch: str) -> None:
+        self._for(co.repo.project).start_branch(co, branch)
+
+    def changes(self, co: Checkout) -> list[FileChange]:
+        return self._for(co.repo.project).changes(co)
+
+    def discard_untracked(self, co: Checkout) -> None:
+        self._for(co.repo.project).discard_untracked(co)
+
+    def snapshot(self, co: Checkout) -> str:
+        return self._for(co.repo.project).snapshot(co)
+
+    def materialize(
+        self,
+        co: Checkout,
+        tree: str,
+        *,
+        include: Sequence[str] | None = None,
+        exclude: Sequence[str] = (),
+    ) -> None:
+        self._for(co.repo.project).materialize(co, tree, include=include, exclude=exclude)
+
+    def file_versions(self, co: Checkout, path: str) -> tuple[str | None, str | None]:
+        return self._for(co.repo.project).file_versions(co, path)
+
+    def cleanup(self, co: Checkout) -> None:
+        self._for(co.repo.project).cleanup(co)
+
+    def diff(self, co: Checkout) -> str:
+        return self._for(co.repo.project).diff(co)
+
+    def recent_diff(self, co: Checkout, days: int) -> tuple[str, list[str]]:
+        return self._for(co.repo.project).recent_diff(co, days)
+
+    def push_branch(self, co: Checkout, branch: str, message: str) -> None:
+        self._for(co.repo.project).push_branch(co, branch, message)
+
+    def open_mr(
+        self, repo: RepoConfig, branch: str, title: str, body: str, labels: Sequence[str]
+    ) -> str:
+        return self._for(repo.project).open_mr(repo, branch, title, body, labels)
+
+    def has_open_mr(self, repo: RepoConfig, branch: str) -> bool:
+        return self._for(repo.project).has_open_mr(repo, branch)
+
+    def list_projects(self) -> list[str]:
+        """Progetti visibili a ciascun token, solo dentro il suo scope, senza doppioni."""
+        found: set[str] = set()
+        for name, backend in self._backends.items():
+            if isinstance(backend, TokenUnavailable):
+                log.warning("%s", backend)
+                continue
+            prefixes = self._scopes[name]
+            found.update(
+                p for p in backend.list_projects() if any(covers(pf, p) for pf in prefixes)
+            )
+        return sorted(found)

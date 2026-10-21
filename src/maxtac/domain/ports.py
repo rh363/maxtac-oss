@@ -27,6 +27,7 @@ from .models import (
     RunSummary,
     SpendEntry,
     StructuredResult,
+    TokenInfo,
     ToolSpec,
     Usage,
 )
@@ -245,6 +246,14 @@ class RepoRegistry(Protocol):
     def approved(self, project: str) -> ApprovedRepo | None: ...
 
     def approved_repos(self) -> list[ApprovedRepo]: ...
+
+
+class TokenRegistry(Protocol):
+    """Ultimo stato noto dei token GitLab (nome, scope, utente, scadenza): mai i valori."""
+
+    def save_tokens(self, infos: Sequence[TokenInfo]) -> None: ...
+
+    def tokens(self) -> list[TokenInfo]: ...
 
 
 class NotifierPort(Protocol):

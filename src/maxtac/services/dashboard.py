@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import calendar
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -23,6 +23,7 @@ from maxtac.domain.policy import (
     approval_blockers,
     next_run_at,
     pick_hunting_repos,
+    resolve_token,
     spend_category,
     truncate,
 )
@@ -115,6 +116,7 @@ class RepoView:
     next_up: bool
     findings_by_status: dict[str, int]
     open_mrs: int
+    token: str | None = None  # nome del token GitLab che copre il repo (mai il valore)
 
 
 @dataclass(frozen=True)
@@ -143,6 +145,7 @@ class ProposalView:
     created_at: datetime
     approve_command: str | None  # solo per le proposte in attesa
     changes: list[FieldChange] = field(default_factory=list)
+    token: str | None = None
 
 
 @dataclass(frozen=True)
@@ -224,6 +227,10 @@ class DashboardService:
     schedule_tz: str = "Europe/Rome"
     registry: RepoRegistry | None = None
     config_projects: frozenset[str] = frozenset()  # repo definiti in config.yaml
+    token_scopes: Mapping[str, Sequence[str]] = field(default_factory=dict)
+
+    def token_for(self, project: str) -> str | None:
+        return resolve_token(project, self.token_scopes)
 
     def dashboard(self, recent: int = 10) -> Dashboard:
         now = self.clock()
@@ -386,6 +393,7 @@ class DashboardService:
                     findings_by_status={s.value: 0 for s in FindingStatus}
                     | counts.get(r.project, {}),
                     open_mrs=len(mrs.get(r.project, set())),
+                    token=self.token_for(r.project),
                 )
             )
         return ReposPage(repos, self._proposals())
@@ -423,6 +431,7 @@ class DashboardService:
                     created_at=p.created_at,
                     approve_command=command,
                     changes=_changes(active.get(p.project), p),
+                    token=self.token_for(p.project),
                 )
             )
         return out

@@ -6,10 +6,11 @@ import html
 import json
 import re
 from collections.abc import Callable, Sequence
+from datetime import date
 from typing import Any
 
-from maxtac.domain.models import FindingRecord, RunReport, RunSummary
-from maxtac.domain.policy import group_into_tasks
+from maxtac.domain.models import FindingRecord, RunReport, RunSummary, TokenInfo
+from maxtac.domain.policy import group_into_tasks, token_state
 from maxtac.services.scan import ScanResult
 
 from .lexicon import Lexicon
@@ -76,6 +77,8 @@ def render_status(
     day_of_month: int | None = None,
     days_in_month: int | None = None,
     runs: Sequence[RunSummary] = (),
+    tokens: Sequence[TokenInfo] = (),
+    today: date | None = None,
 ) -> str:
     total = sum(counts.values())
     # una MR può coprire più finding (CVE dello stesso package): una riga per MR
@@ -103,7 +106,33 @@ def render_status(
         flags = " dry-run" if r.dry_run else ""
         flags += f" interrotta ({r.aborted[:80]})" if r.aborted else ""
         lines.append(f"  - {r.run_id}: {lx.money(r.spent_usd)}, {r.mrs_opened} MR{flags}")
+    if tokens:
+        lines.append("token GitLab (ultimo controllo):")
+    for t in tokens:
+        lines.append("  - " + token_line(t, today or t.checked_at.date()))
     return "\n".join(lines)
+
+
+TOKEN_STATE_LABEL = {
+    "ok": "ok",
+    "expiring": "ATTENZIONE: scade a breve",
+    "expired": "ATTENZIONE: scaduto",
+    "unknown": "scadenza non leggibile",
+    "error": "ERRORE",
+}
+
+
+def token_line(t: TokenInfo, today: date) -> str:
+    """Nome, scope, utente e scadenza di un token. Mai il valore."""
+    scope = ", ".join(p or "(tutta l'istanza)" for p in t.scope)
+    state = token_state(t, today)
+    expiry = f"scade il {t.expires_at.isoformat()}" if t.expires_at else ""
+    who = f"utente {t.username}" if t.username else ""
+    detail = safe(t.error or "") if state == "error" else expiry
+    parts = [p for p in (who, detail) if p]
+    return f"{t.name} [{scope}]: {TOKEN_STATE_LABEL[state]}" + (
+        f" ({'; '.join(parts)})" if parts else ""
+    )
 
 
 Lookup = Callable[[str, str], FindingRecord | None]  # (project, fingerprint)

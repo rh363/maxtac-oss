@@ -20,4 +20,4 @@ USER 1000:1000
 ENV PATH=/opt/autofix/bin:$PATH AUTOFIX_CONFIG=/etc/autofix/config.yaml
 
 ENTRYPOINT ["tini", "--", "autofix"]
-CMD ["patrol"]
+CMD ["schedule"]
