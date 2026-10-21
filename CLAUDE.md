@@ -1,7 +1,9 @@
 # CLAUDE.md
 
 Autofix (package `maxtac`): servizio Python 3.13 che ogni notte scansiona repo GitLab per CVE,
-finding SAST e bug e apre MR con fix verificati. Si lavora per fasi (vedi README); a fine fase
+finding SAST e bug e apre MR con fix verificati. Il README è per chi installa e usa (tono
+neutro, comando `autofix`); la documentazione tecnica sta in `docs/` (architecture, security,
+configuration, development, go-live). Si lavora per fasi (vedi `docs/architecture.md`); a fine fase
 ci si ferma e si riassume.
 
 ## Vincoli non negoziabili

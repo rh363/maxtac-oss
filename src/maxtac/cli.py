@@ -95,7 +95,7 @@ def _selected_repos(c: Container, args: argparse.Namespace) -> list[RepoConfig] 
     repos = c.repos()
     if not repos:
         print(
-            "nessun repo: aggiungili al config.yaml o approvali con `maxtac repos`",
+            "nessun repo: aggiungili al config.yaml o approvali con `autofix repos`",
             file=sys.stderr,
         )
         return None

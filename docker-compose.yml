@@ -24,7 +24,7 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     healthcheck:
-      test: ["CMD", "maxtac", "status"]
+      test: ["CMD", "autofix", "status"]
       interval: 5m
       timeout: 30s
       retries: 3

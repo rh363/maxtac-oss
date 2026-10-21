@@ -153,7 +153,7 @@ def cmd_discover(c: Container, args: argparse.Namespace) -> int:
             diff = proposal_diff(current.repo, p)
             print("differenze dall'approvato:" if diff else "nessuna differenza dall'approvato")
             print("\n".join(diff))
-        print(f"-> maxtac repos approve {project}\n")
+        print(f"-> autofix repos approve {project}\n")
     return 1 if failed else 0
 
 
@@ -175,7 +175,7 @@ def cmd_list(c: Container, args: argparse.Namespace) -> int:
             flag += ", sospetta"
         rows.append((p.project, f"in attesa ({flag})", ", ".join(p.languages), p.test_command))
     if not rows:
-        print("nessun repo: aggiungili al config.yaml o usa `maxtac repos discover`")
+        print("nessun repo: aggiungili al config.yaml o usa `autofix repos discover`")
         return 0
     width = max(len(r[0]) for r in rows)
     for project, source, langs, test in rows:

@@ -23,7 +23,7 @@ budget:
   max_mrs_per_night: 3
   max_attempts: 2
   max_iterations: 30
-  discovery_per_repo_usd: 0.15  # `maxtac repos discover`: tetto per repo
+  discovery_per_repo_usd: 0.15  # `autofix repos discover`: tetto per repo
   discovery_max_iterations: 12
 
 models:
@@ -70,9 +70,9 @@ ui:
   themes:                         # per email (o username se web.user_claim: username)
     alice@example.com: cyberpunk
 
-# Dashboard web (`maxtac web`, servizio `web` del compose). Login OIDC con PKCE: su GitLab
-# crea un'Application (Admin > Applications, o del gruppo) confidential, scope openid, profile
-# ed email, redirect URI qui sotto. L'issuer è l'URL di GitLab.
+# Dashboard web (`autofix web`, servizio `web` del compose). Login OIDC con PKCE: su GitLab
+# crea un'Application (User Settings > Applications, non serve admin), confidential, scope
+# openid, profile ed email, redirect URI qui sotto. L'issuer è l'URL di GitLab.
 # Segreti: /run/secrets/oidc_client_secret e /run/secrets/web_session_secret.
 web:
   user_claim: email               # email verificata dell'id_token (email_verified: true)
@@ -85,7 +85,7 @@ web:
     username_claims: [preferred_username, nickname]   # usati solo con user_claim: username
   session_max_age_s: 28800
   trusted_proxies: []             # es. ["172.16.0.0/12"] se il reverse proxy passa X-Forwarded-For
-  # dev_user: alice@example.com   # solo `maxtac web --dev`, bind su loopback
+  # dev_user: alice@example.com   # solo `autofix web --dev`, bind su loopback
 
 # Container effimeri per scan, fix e verifica. Mai root; nessun segreto dentro.
 sandbox:
@@ -110,7 +110,7 @@ workdir: /var/lib/autofix/work
 db_path: /var/lib/autofix/autofix.sqlite3
 
 # Repo scritti a mano (config di fiducia). Si possono anche scoprire con
-# `maxtac repos discover` e approvare con `maxtac repos approve`: in caso di conflitto vince
+# `autofix repos discover` e approvare con `autofix repos approve`: in caso di conflitto vince
 # questa lista. Può restare vuota.
 repos:
   - project: team/api

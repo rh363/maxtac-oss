@@ -7,6 +7,14 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ## [Unreleased]
 
+### Changed
+
+- Documentazione riorganizzata: il README spiega come si installa e come si usa (requisiti,
+  token GitLab senza admin, Application OIDC, primo utilizzo, uso quotidiano, costi,
+  manutenzione, problemi comuni); i contenuti tecnici sono in `docs/` (`architecture.md`,
+  `security.md`, `configuration.md`, `development.md`, `go-live.md`).
+- Le immagini Docker, l'healthcheck e i messaggi della CLI usano il comando `autofix`.
+
 ### Added
 
 - Fase 6b, dashboard: pagina Repository (repo attivi con origine, comandi, rotazione del bug

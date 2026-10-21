@@ -65,7 +65,7 @@ def main(cfg_path, *args):
 def test_discover_list_show_approve_flow(setup, capsys):
     assert main(setup, "discover", "--project", "team/new", "--project", "team/api") == 0
     out = capsys.readouterr().out
-    assert "go test ./..." in out and "maxtac repos approve team/new" in out
+    assert "go test ./..." in out and "autofix repos approve team/new" in out
     assert "team/api: è nel config.yaml" in out
 
     assert main(setup, "list") == 0
