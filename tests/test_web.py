@@ -46,6 +46,7 @@ NOW = datetime(2026, 10, 20, 8, 0, tzinfo=UTC)
 
 def config(tmp_path: Path, **web_overrides) -> AppConfig:
     web = {
+        "user_claim": "username",  # i test email sono in test_web_email.py
         "allowed_users": ["alex", "boss"],
         "oidc": {
             "issuer": ISSUER,
@@ -236,7 +237,7 @@ def test_authorize_url_uses_pkce_state_and_nonce(cfg, idp):
     loc = c.get("/auth/login", follow_redirects=False).headers["location"]
     q = parse_qs(urlparse(loc).query)
     assert loc.startswith(f"{ISSUER}/oauth/authorize?")
-    assert q["scope"] == ["openid profile"] and q["client_id"] == [CLIENT_ID]
+    assert q["scope"] == ["openid profile email"] and q["client_id"] == [CLIENT_ID]
     assert len(q["state"][0]) >= 32 and len(q["nonce"][0]) >= 32
     assert len(q["code_challenge"][0]) == 43
 

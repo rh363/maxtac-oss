@@ -66,12 +66,17 @@ def config(tmp_path):
 
 
 def test_status_theme_per_user(config, capsys):
-    assert cli.main(["--config", str(config), "--as", "alex", "status"]) == 0
+    assert cli.main(["--config", str(config), "--as", "alice@example.com", "status"]) == 0
     assert "MaxTac" in capsys.readouterr().out
     assert cli.main(["--config", str(config), "--as", "capo", "status"]) == 0
     out = capsys.readouterr().out
     assert "Autofix" in out and not THEMED.search(out)
-    assert cli.main(["--config", str(config), "--as", "alex", "--theme", "neutral", "status"]) == 0
+    assert (
+        cli.main(
+            ["--config", str(config), "--as", "alice@example.com", "--theme", "neutral", "status"]
+        )
+        == 0
+    )
     assert not THEMED.search(capsys.readouterr().out)
 
 

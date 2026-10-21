@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -22,14 +23,15 @@ def write(tmp_path, data):
 def test_example_config_loads_and_maps_to_domain():
     cfg = load_config(EXAMPLE)
     repos = cfg.to_repos()
-    assert [r.project for r in repos] == ["alex/ecs2", "alex/fwagent"]
+    assert [r.project for r in repos] == ["team/api", "team/agent"]
     assert repos[0].setup_command == "pip install -r requirements.txt"
     s = cfg.to_settings(dry_run=True)
     assert s.dry_run and s.enabled_kinds == {"cve"}
     assert s.limits.per_night_usd == 3.0 and s.limits.max_mrs_per_night == 3
     assert s.branch_prefix == "autofix" and s.mr_labels == ("autofix",)
     assert cfg.to_pricing().prices["claude-sonnet-5-5"].output == 10.0
-    assert cfg.ui.theme_for("alex") == "cyberpunk"
+    assert cfg.ui.theme_for("alice@example.com") == "cyberpunk"
+    assert cfg.ui.theme_for("Alice@Example.COM") == "cyberpunk"  # email case-insensitive
     assert cfg.ui.theme_for("capo") == "neutral" and cfg.ui.theme_for(None) == "neutral"
 
 
@@ -54,11 +56,10 @@ def test_subgroups_allowed(tmp_path):
     assert load_config(write(tmp_path, data)).repos[0].project == "seeweb/team/ecs2"
 
 
-def test_empty_repos_and_unknown_keys_rejected(tmp_path):
+def test_empty_repos_allowed_unknown_keys_rejected(tmp_path):
     data = raw()
-    data["repos"] = []
-    with pytest.raises(ValidationError):
-        load_config(write(tmp_path, data))
+    data["repos"] = []  # i repo possono arrivare tutti dall'autodiscovery approvata
+    assert load_config(write(tmp_path, data)).to_repos() == []
     data = raw()
     data["budget"]["per_nite_usd"] = 1
     with pytest.raises(ValidationError):
@@ -67,7 +68,7 @@ def test_empty_repos_and_unknown_keys_rejected(tmp_path):
 
 def test_bad_theme_rejected(tmp_path):
     data = raw()
-    data["ui"]["themes"]["alex"] = "vaporwave"
+    data["ui"]["themes"]["alice@example.com"] = "vaporwave"
     with pytest.raises(ValidationError):
         load_config(write(tmp_path, data))
 
@@ -115,3 +116,44 @@ def test_notifier_wiring(tmp_path):
     c.secrets = Secrets(_secrets_dir=tmp_path / "s")
     assert isinstance(c.notifier(), WebhookNotifier)
     c.close()
+
+
+EXAMPLE_DOMAINS = ("example.com", "example.org", "example.it")
+
+
+def test_example_config_uses_only_example_domains():
+    """Il file d'esempio finisce nel repo: niente email o host reali di colleghi."""
+    text = EXAMPLE.read_text()
+    hosts = re.findall(r"@([A-Za-z0-9.-]+\.[A-Za-z]{2,})", text)
+    hosts += re.findall(r"https?://([^/\s:\"']+)", text)
+    dotted = [h for h in hosts if "." in h]  # nomi di servizio interni (proxy) ammessi
+    assert dotted, "il test non trova nessun dominio: regex da aggiornare"
+    bad = [h for h in dotted if not h.lower().endswith(EXAMPLE_DOMAINS)]
+    assert not bad, f"domini non d'esempio in config.example.yaml: {bad}"
+
+
+def test_web_users_are_emails_and_case_insensitive(tmp_path):
+    data = raw()
+    data["web"]["allowed_users"] = ["alice"]
+    with pytest.raises(ValidationError, match="email"):
+        load_config(write(tmp_path, data))
+    data = raw()
+    data["web"]["oidc"]["scopes"] = ["openid", "profile"]
+    cfg = load_config(write(tmp_path, data))
+    assert cfg.web is not None and cfg.web.oidc is not None
+    assert "email" in cfg.web.oidc.scopes  # aggiunto: senza non arriva il claim email
+    assert cfg.web.is_allowed("ALICE@example.com") and not cfg.web.is_allowed("eve@example.com")
+    data = raw()
+    data["web"]["user_claim"] = "username"
+    data["web"]["allowed_users"] = ["alice"]
+    assert load_config(write(tmp_path, data)).web is not None
+
+
+def test_discovery_model_needs_price_and_ca_bundle_optional(tmp_path):
+    data = raw()
+    data["models"]["discovery"] = "claude-sconosciuto"
+    with pytest.raises(ValidationError, match="senza prezzo"):
+        load_config(write(tmp_path, data))
+    data = raw()
+    data["gitlab"]["ca_bundle"] = "/etc/autofix/gitlab-ca.pem"
+    assert str(load_config(write(tmp_path, data)).gitlab.ca_bundle) == "/etc/autofix/gitlab-ca.pem"

@@ -249,3 +249,47 @@ def test_default_branch_from_config_wins(vcs: GitLabVCS, gl: Any, tmp_path: Path
     repo = RepoConfig("alex/ecs2", ("python",), "pytest", default_branch="main")
     co = vcs.checkout(repo, tmp_path / "work")
     assert co.base_branch == "main"
+
+
+def test_list_projects_asks_for_developer_access_and_skips_archived() -> None:
+    calls: list[dict[str, Any]] = []
+
+    class Projects:
+        def list(self, **kw: Any) -> list[Any]:
+            calls.append(kw)
+            return [
+                SimpleNamespace(path_with_namespace="team/b"),
+                SimpleNamespace(path_with_namespace="team/a"),
+            ]
+
+    vcs = GitLabVCS(
+        url="https://gitlab.example.it",
+        token=TOKEN,
+        bot_name="b",
+        bot_email="b@example.it",
+        client=SimpleNamespace(projects=Projects()),
+    )
+    assert vcs.list_projects() == ["team/a", "team/b"]
+    assert calls == [
+        {"membership": True, "archived": False, "min_access_level": 30, "iterator": True}
+    ]
+
+
+def test_ca_bundle_goes_to_git_and_api_client(tmp_path: Path) -> None:
+    ca = tmp_path / "gitlab-ca.pem"
+    vcs = GitLabVCS(
+        url="https://gitlab.example.it",
+        token=TOKEN,
+        bot_name="b",
+        bot_email="b@example.it",
+        ca_bundle=ca,
+    )
+    env = vcs._auth_env()
+    pairs = {
+        env[f"GIT_CONFIG_KEY_{i}"]: env[f"GIT_CONFIG_VALUE_{i}"]
+        for i in range(int(env["GIT_CONFIG_COUNT"]))
+    }
+    assert pairs["http.https://gitlab.example.it/.sslCAInfo"] == str(ca)
+    assert vcs._gl.ssl_verify == str(ca)  # python-gitlab
+    plain = GitLabVCS(url="https://gitlab.example.it", token=TOKEN, bot_name="b", bot_email="b@x")
+    assert plain._auth_env()["GIT_CONFIG_COUNT"] == "1" and plain._gl.ssl_verify is True

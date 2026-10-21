@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Literal, Self
 
@@ -11,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, m
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from maxtac.domain.budget import ModelPrice, Pricing
-from maxtac.domain.models import RepoConfig
+from maxtac.domain.models import Language, RepoConfig
 from maxtac.services.pipeline import Limits, Models, PipelineSettings
 
 ThemeName = Literal["neutral", "cyberpunk"]
@@ -28,6 +29,9 @@ class GitLabConf(_Model):
     bot_username: str
     bot_name: str = "Autofix Bot"
     bot_email: str | None = None  # default: <bot_username>@noreply.<host di GitLab>
+    # CA interna per un GitLab self-hosted con certificato non pubblico: usata da API, git e
+    # login OIDC della dashboard. Il sandbox non la riceve (e non raggiunge GitLab).
+    ca_bundle: Path | None = None
 
     def commit_email(self) -> str:
         host = self.url.split("://", 1)[1].split("/", 1)[0]
@@ -78,12 +82,15 @@ class BudgetConf(_Model):
     max_mrs_per_night: int = Field(default=3, ge=0)
     max_attempts: int = Field(default=2, ge=1)
     max_iterations: int = Field(default=30, ge=1)
+    discovery_per_repo_usd: float = Field(default=0.15, gt=0)
+    discovery_max_iterations: int = Field(default=12, ge=1, le=40)
 
 
 class ModelsConf(_Model):
     triage: str = "claude-haiku-5-5"
     fix: str = "claude-sonnet-5-5"
     hunt: str = "claude-opus-5-5"
+    discovery: str = "claude-haiku-5-5"
 
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
@@ -127,13 +134,20 @@ class NotifyConf(_Model):
     timeout_s: float = Field(default=10.0, gt=0)
 
 
+def same_user(a: str, b: str) -> bool:
+    """Email e username GitLab non distinguono maiuscole e minuscole."""
+    return a.casefold() == b.casefold()
+
+
 class UIConf(_Model):
     default_theme: ThemeName = "neutral"
-    themes: dict[str, ThemeName] = Field(default_factory=dict)
+    themes: dict[str, ThemeName] = Field(default_factory=dict)  # utente (email) -> tema
 
     def theme_for(self, username: str | None) -> ThemeName:
-        if username and username in self.themes:
-            return self.themes[username]
+        if username:
+            for user, theme in self.themes.items():
+                if same_user(user, username):
+                    return theme
         return self.default_theme
 
 
@@ -143,7 +157,7 @@ class OIDCConf(_Model):
     issuer: str = Field(pattern=r"^https://[^/\s]+(/[^\s]*)?$")
     client_id: str = Field(min_length=1)
     redirect_uri: str = Field(pattern=r"^https://[^/\s]+/[^\s]*$")
-    scopes: list[str] = Field(default_factory=lambda: ["openid", "profile"])
+    scopes: list[str] = Field(default_factory=lambda: ["openid", "profile", "email"])
     # GitLab mette lo username in `nickname` (e in `preferred_username` nelle versioni recenti)
     username_claims: list[str] = Field(
         default_factory=lambda: ["preferred_username", "nickname"], min_length=1
@@ -159,6 +173,9 @@ class OIDCConf(_Model):
 
 
 class WebConf(_Model):
+    # "email": l'utente è l'email verificata dell'id_token (scope `email`, `email_verified`
+    # obbligatorio). "username": il primo di oidc.username_claims.
+    user_claim: Literal["email", "username"] = "email"
     allowed_users: list[str] = Field(min_length=1)
     oidc: OIDCConf | None = None
     host: str = "0.0.0.0"  # dentro il container; sull'host la porta va pubblicata su 127.0.0.1
@@ -175,9 +192,20 @@ class WebConf(_Model):
 
     @model_validator(mode="after")
     def _check(self) -> Self:
-        if self.dev_user is not None and self.dev_user not in self.allowed_users:
+        if self.dev_user is not None and not self.is_allowed(self.dev_user):
             raise ValueError("web.dev_user deve stare in web.allowed_users")
+        if self.user_claim == "email":
+            bad = [u for u in self.allowed_users if "@" not in u]
+            if bad:
+                raise ValueError(
+                    f"web.allowed_users deve contenere email (user_claim=email): {bad}"
+                )
+            if self.oidc is not None and "email" not in self.oidc.scopes:
+                self.oidc.scopes.append("email")
         return self
+
+    def is_allowed(self, user: str) -> bool:
+        return any(same_user(u, user) for u in self.allowed_users)
 
 
 class PriceConf(_Model):
@@ -189,7 +217,7 @@ class PriceConf(_Model):
 
 class RepoConf(_Model):
     project: str
-    languages: list[Literal["python", "go", "javascript", "typescript"]]
+    languages: list[Language]
     test_command: str
     setup_command: str | None = None
     default_branch: str | None = None
@@ -218,14 +246,16 @@ class AppConfig(_Model):
     scanners: ScannersConf = ScannersConf()
     workdir: Path = Path("/var/lib/autofix/work")
     db_path: Path = Path("/var/lib/autofix/autofix.sqlite3")
-    repos: list[RepoConf] = Field(min_length=1)
+    # Repo di fiducia scritti a mano. Si aggiungono quelli scoperti e approvati con
+    # `maxtac repos approve` (in caso di conflitto vince questo file).
+    repos: list[RepoConf] = Field(default_factory=list)
     prices_usd_per_mtok: dict[str, PriceConf]
 
     @model_validator(mode="after")
     def _check(self) -> Self:
         missing = [
             m
-            for m in (self.models.triage, self.models.fix, self.models.hunt)
+            for m in (self.models.triage, self.models.fix, self.models.hunt, self.models.discovery)
             if m not in self.prices_usd_per_mtok
         ]
         if missing:
@@ -238,13 +268,13 @@ class AppConfig(_Model):
             raise ValueError("per_task_usd non può superare per_night_usd")
         return self
 
-    def semgrep_rulesets(self) -> list[str]:
-        """Ruleset base più quelli dei linguaggi presenti nei repo configurati.
+    def semgrep_rulesets(self, extra_languages: Iterable[str] = ()) -> list[str]:
+        """Ruleset base più quelli dei linguaggi presenti nei repo (config e approvati).
 
         Semgrep applica ogni regola solo ai file del suo linguaggio: i ruleset in più costano
         tempo di download, non finding sbagliati.
         """
-        langs = {lang for r in self.repos for lang in r.languages}
+        langs = {lang for r in self.repos for lang in r.languages} | set(extra_languages)
         sg = self.scanners.semgrep
         extra = [rs for lang in sorted(langs) for rs in sg.by_language.get(lang, [])]
         return list(dict.fromkeys([*sg.rulesets, *extra]))

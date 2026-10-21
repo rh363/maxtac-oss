@@ -162,6 +162,9 @@ class FakeVCS:
     def has_open_mr(self, repo: RepoConfig, branch: str) -> bool:
         return (repo.project, branch) in self.gl.open_branches
 
+    def list_projects(self) -> list[str]:
+        return sorted(self.gl.repos)
+
 
 # --- Sandbox ---
 

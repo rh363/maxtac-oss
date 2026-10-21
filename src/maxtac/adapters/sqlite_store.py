@@ -10,11 +10,17 @@ from pathlib import Path
 from typing import Any
 
 from maxtac.domain.models import (
+    LANGUAGES,
+    ApprovedRepo,
     Finding,
     FindingQuery,
     FindingRecord,
     FindingRow,
     FindingStatus,
+    Language,
+    ProposalStatus,
+    RepoConfig,
+    RepoProposal,
     RunReport,
     RunSummary,
     Severity,
@@ -64,6 +70,33 @@ CREATE TABLE IF NOT EXISTS runs (
     report TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS runs_started ON runs(started_at);
+CREATE TABLE IF NOT EXISTS repo_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    status TEXT NOT NULL,
+    languages TEXT NOT NULL,
+    setup_command TEXT,
+    test_command TEXT NOT NULL,
+    default_branch TEXT,
+    rationale TEXT NOT NULL,
+    baseline_ok INTEGER,
+    baseline_output TEXT NOT NULL,
+    duration_s REAL NOT NULL,
+    cost_usd REAL NOT NULL,
+    suspicious TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS repo_proposals_project ON repo_proposals(project, status);
+CREATE TABLE IF NOT EXISTS repos (
+    project TEXT PRIMARY KEY,
+    languages TEXT NOT NULL,
+    setup_command TEXT,
+    test_command TEXT NOT NULL,
+    default_branch TEXT,
+    approved_at TEXT NOT NULL,
+    approved_by TEXT NOT NULL,
+    proposal_id INTEGER
+);
 """
 
 
@@ -329,3 +362,152 @@ class SqliteRunStore:
             return None
         data: dict[str, Any] = json.loads(row["report"])
         return data
+
+
+def _languages(raw: str) -> tuple[Language, ...]:
+    return tuple(lang for lang in LANGUAGES if lang in json.loads(raw))
+
+
+class SqliteRepoRegistry:
+    """Proposte dell'autodiscovery e repo approvati."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._db = conn
+
+    @staticmethod
+    def _proposal(r: sqlite3.Row) -> RepoProposal:
+        return RepoProposal(
+            id=int(r["id"]),
+            project=r["project"],
+            status=ProposalStatus(r["status"]),
+            languages=_languages(r["languages"]),
+            setup_command=r["setup_command"],
+            test_command=r["test_command"],
+            default_branch=r["default_branch"],
+            rationale=r["rationale"],
+            baseline_ok=None if r["baseline_ok"] is None else bool(r["baseline_ok"]),
+            baseline_output=r["baseline_output"],
+            duration_s=float(r["duration_s"]),
+            cost_usd=float(r["cost_usd"]),
+            suspicious=tuple(json.loads(r["suspicious"])),
+            created_at=datetime.fromisoformat(r["created_at"]),
+        )
+
+    def save_proposal(self, proposal: RepoProposal) -> int:
+        p = proposal
+        self._db.execute("BEGIN")
+        try:
+            self._db.execute(
+                "UPDATE repo_proposals SET status = ? WHERE project = ? AND status = ?",
+                (ProposalStatus.SUPERSEDED.value, p.project, ProposalStatus.PENDING.value),
+            )
+            row = self._db.execute(
+                """INSERT INTO repo_proposals
+                       (project, status, languages, setup_command, test_command, default_branch,
+                        rationale, baseline_ok, baseline_output, duration_s, cost_usd,
+                        suspicious, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""",
+                (
+                    p.project,
+                    ProposalStatus.PENDING.value,
+                    json.dumps(list(p.languages)),
+                    p.setup_command,
+                    p.test_command,
+                    p.default_branch,
+                    p.rationale,
+                    None if p.baseline_ok is None else int(p.baseline_ok),
+                    p.baseline_output,
+                    p.duration_s,
+                    p.cost_usd,
+                    json.dumps(list(p.suspicious), ensure_ascii=False),
+                    _iso(p.created_at),
+                ),
+            ).fetchone()
+            self._db.execute("COMMIT")
+        except BaseException:
+            self._db.execute("ROLLBACK")
+            raise
+        return int(row["id"])
+
+    def pending_proposal(self, project: str) -> RepoProposal | None:
+        row = self._db.execute(
+            "SELECT * FROM repo_proposals WHERE project = ? AND status = ? ORDER BY id DESC",
+            (project, ProposalStatus.PENDING.value),
+        ).fetchone()
+        return self._proposal(row) if row else None
+
+    def list_proposals(self, status: ProposalStatus | None = None) -> list[RepoProposal]:
+        if status is None:
+            rows = self._db.execute("SELECT * FROM repo_proposals ORDER BY id DESC")
+        else:
+            rows = self._db.execute(
+                "SELECT * FROM repo_proposals WHERE status = ? ORDER BY id DESC", (status.value,)
+            )
+        return [self._proposal(r) for r in rows]
+
+    def approve(self, proposal: RepoProposal, repo: RepoConfig, by: str, at: datetime) -> None:
+        self._db.execute("BEGIN")
+        try:
+            self._db.execute(
+                """INSERT INTO repos
+                       (project, languages, setup_command, test_command, default_branch,
+                        approved_at, approved_by, proposal_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(project) DO UPDATE SET
+                       languages = excluded.languages, setup_command = excluded.setup_command,
+                       test_command = excluded.test_command,
+                       default_branch = excluded.default_branch,
+                       approved_at = excluded.approved_at, approved_by = excluded.approved_by,
+                       proposal_id = excluded.proposal_id""",
+                (
+                    repo.project,
+                    json.dumps(list(repo.languages)),
+                    repo.setup_command,
+                    repo.test_command,
+                    repo.default_branch,
+                    _iso(at),
+                    by,
+                    proposal.id,
+                ),
+            )
+            if proposal.id is not None:
+                self._db.execute(
+                    "UPDATE repo_proposals SET status = ? WHERE id = ?",
+                    (ProposalStatus.APPROVED.value, proposal.id),
+                )
+            self._db.execute("COMMIT")
+        except BaseException:
+            self._db.execute("ROLLBACK")
+            raise
+
+    def reject(self, project: str) -> bool:
+        cur = self._db.execute(
+            "UPDATE repo_proposals SET status = ? WHERE project = ? AND status = ?",
+            (ProposalStatus.REJECTED.value, project, ProposalStatus.PENDING.value),
+        )
+        return cur.rowcount > 0
+
+    def remove(self, project: str) -> bool:
+        return self._db.execute("DELETE FROM repos WHERE project = ?", (project,)).rowcount > 0
+
+    @staticmethod
+    def _approved(r: sqlite3.Row) -> ApprovedRepo:
+        return ApprovedRepo(
+            repo=RepoConfig(
+                project=r["project"],
+                languages=_languages(r["languages"]),
+                test_command=r["test_command"],
+                setup_command=r["setup_command"],
+                default_branch=r["default_branch"],
+            ),
+            approved_at=datetime.fromisoformat(r["approved_at"]),
+            approved_by=r["approved_by"],
+            proposal_id=r["proposal_id"],
+        )
+
+    def approved(self, project: str) -> ApprovedRepo | None:
+        row = self._db.execute("SELECT * FROM repos WHERE project = ?", (project,)).fetchone()
+        return self._approved(row) if row else None
+
+    def approved_repos(self) -> list[ApprovedRepo]:
+        return [self._approved(r) for r in self._db.execute("SELECT * FROM repos ORDER BY project")]

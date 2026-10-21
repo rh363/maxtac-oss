@@ -13,6 +13,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -21,12 +22,14 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from maxtac.adapters.sqlite_store import (
     SqliteBudget,
+    SqliteRepoRegistry,
     SqliteRunStore,
     SqliteStore,
     connect_readonly,
 )
 from maxtac.config import AppConfig, Secrets, WebConf
-from maxtac.domain.models import FindingQuery, FindingStatus, Severity
+from maxtac.domain.models import FindingQuery, FindingStatus, RepoConfig, Severity
+from maxtac.domain.policy import merge_repos
 from maxtac.services.dashboard import DashboardService, Scrubber
 
 from . import themes
@@ -110,7 +113,9 @@ def create_app(
             redirect_uri=o.redirect_uri,
             scopes=o.scopes,
             username_claims=o.username_claims,
+            user_claim=web.user_claim,
             timeout_s=o.timeout_s,
+            ca_bundle=_oidc_ca_bundle(cfg),
             transport=transport,
         )
 
@@ -152,6 +157,16 @@ def create_app(
 # --- dipendenze ---
 
 
+def _oidc_ca_bundle(cfg: AppConfig) -> str | None:
+    """La CA interna di GitLab vale anche per il login solo se l'IdP è GitLab stesso:
+    con un IdP pubblico sostituirebbe le CA di sistema e romperebbe la verifica TLS."""
+    ca, oidc = cfg.gitlab.ca_bundle, cfg.web.oidc if cfg.web else None
+    if ca is None or oidc is None:
+        return None
+    host = urlparse(cfg.gitlab.url).netloc
+    return str(ca) if urlparse(oidc.issuer).netloc == host else None
+
+
 def _state(request: Request) -> _State:
     st: _State = request.app.state.autofix
     return st
@@ -164,10 +179,18 @@ def current_user(request: Request) -> str:
     user = request.session.get("user")
     if not isinstance(user, str):
         raise HTTPException(401, "login richiesto")
-    if user not in st.web.allowed_users:  # allowlist ricontrollata a ogni richiesta
+    if not st.web.is_allowed(user):  # allowlist ricontrollata a ogni richiesta
         request.session.clear()
         raise HTTPException(403, "accesso non consentito")
     return user
+
+
+def _repos(cfg: AppConfig, conn: sqlite3.Connection) -> list[RepoConfig]:
+    try:
+        approved = [a.repo for a in SqliteRepoRegistry(conn).approved_repos()]
+    except sqlite3.OperationalError:  # db di una versione precedente, senza la tabella repos
+        approved = []
+    return merge_repos(cfg.to_repos(), approved)
 
 
 def service(request: Request) -> Iterator[DashboardService]:
@@ -179,7 +202,7 @@ def service(request: Request) -> Iterator[DashboardService]:
             store=SqliteStore(conn),
             runs=SqliteRunStore(conn),
             budget=SqliteBudget(conn),
-            repos=cfg.to_repos(),
+            repos=_repos(cfg, conn),
             credits_usd=cfg.budget.monthly_credits_usd,
             night_cap_usd=cfg.budget.per_night_usd,
             hunting_enabled=cfg.features.hunting,
@@ -254,7 +277,7 @@ def _routes(app: FastAPI) -> None:
             log.warning("login OIDC rifiutato: %s", e)
             return JSONResponse({"detail": "login non valido"}, status_code=400)
         user = st.oidc.username(claims)
-        if user is None or user not in st.web.allowed_users:
+        if user is None or not st.web.is_allowed(user):
             log.warning("login negato a %r (non in web.allowed_users)", user)
             return JSONResponse({"detail": "accesso non consentito"}, status_code=403)
         request.session["user"] = user

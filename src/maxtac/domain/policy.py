@@ -5,6 +5,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import posixpath
+import re
 import tomllib
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Sequence
@@ -288,3 +289,64 @@ def next_run_at(now: datetime, at: str, timezone: str) -> datetime:
     if candidate <= local:
         candidate = datetime.combine(local.date() + timedelta(days=1), time(hh, mm), tzinfo=tz)
     return candidate
+
+
+# --- comandi proposti dall'autodiscovery (input non fidato) ---
+
+TEST_RUNNERS = re.compile(
+    r"""(?x)(^|[\s;&|(])(
+        pytest | py\.test | python3?\s+-m\s+(pytest|unittest) | tox | nox | hatch\s+test
+      | (uv|poetry|pdm|pipenv)\s+run\s+(pytest|python3?\s+-m\s+(pytest|unittest)|tox|nox)
+      | go\s+test
+      | (npm|pnpm|yarn|bun)\s+(run\s+)?test(:\S+)? | npx\s+(jest|vitest|mocha) | jest | vitest
+      | make\s+(test|check)\b
+    )"""
+)
+TRIVIAL_COMMANDS = {"", "true", ":", "/bin/true", "exit 0", "exit", "echo", "yes", "sleep"}
+SWALLOW_FAILURE = re.compile(r"\|\|\s*(true|:|exit\s+0|echo\b)|;\s*(true|exit\s+0)\s*$")
+NETWORK_TOOLS = re.compile(
+    r"(^|[\s;&|(`$])(curl|wget|nc|ncat|netcat|socat|ssh|scp|sftp|rsync|ftp|telnet)(\s|$)"
+)
+PUBLISH = re.compile(
+    r"(git\s+push|twine\s+upload|npm\s+publish|pnpm\s+publish|yarn\s+publish|"
+    r"poetry\s+publish|uv\s+publish|docker\s+(push|login))"
+)
+OUTSIDE_REDIRECT = re.compile(r">>?\s*(/(?!work(/|\s|$)|tmp(/|\s|$)|dev/null)\S*|\S*\.\./\S*)")
+PRIVILEGE = re.compile(r"(^|[\s;&|(])(sudo|su|doas|chmod\s+[0-7]*777|chown)(\s|$)")
+
+
+def command_suspicions(setup_command: str | None, test_command: str) -> list[str]:
+    """Motivi per cui una coppia setup/test scoperta automaticamente va guardata da un umano.
+
+    È un'euristica, non un sandbox: i comandi girano comunque solo nel sandbox, e diventano
+    config di fiducia solo con l'approvazione esplicita dell'operatore.
+    """
+    out: list[str] = []
+    test = test_command.strip()
+    if test.rstrip(";").strip() in TRIVIAL_COMMANDS or test.startswith(("echo ", "exit ")):
+        out.append("test_command banale: non esegue alcun test")
+    elif not TEST_RUNNERS.search(test):
+        out.append("test_command senza un test runner noto")
+    for label, cmd in (("setup_command", setup_command or ""), ("test_command", test)):
+        if not cmd:
+            continue
+        if SWALLOW_FAILURE.search(cmd):
+            out.append(f"{label} ignora i fallimenti (|| true, ; exit 0...)")
+        if NETWORK_TOOLS.search(cmd):
+            out.append(f"{label} usa strumenti di rete (curl, wget, ssh...)")
+        if PUBLISH.search(cmd):
+            out.append(f"{label} pubblica o fa push")
+        if OUTSIDE_REDIRECT.search(cmd):
+            out.append(f"{label} scrive fuori da /work")
+        if PRIVILEGE.search(cmd):
+            out.append(f"{label} chiede privilegi (sudo, chmod 777...)")
+    return out
+
+
+def merge_repos(manual: Sequence[RepoConfig], approved: Iterable[RepoConfig]) -> list[RepoConfig]:
+    """Repo scritti a mano nel config più quelli approvati dall'autodiscovery.
+
+    In caso di conflitto vince il config: è la fonte di fiducia scritta dall'operatore.
+    """
+    known = {r.project for r in manual}
+    return [*manual, *(r for r in approved if r.project not in known)]

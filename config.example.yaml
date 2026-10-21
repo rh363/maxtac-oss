@@ -5,6 +5,10 @@ gitlab:
   bot_username: autofix-bot
   bot_name: Autofix Bot
   bot_email: autofix-bot@noreply.gitlab.example.it
+  # GitLab self-hosted con certificato di una CA interna: il bundle PEM vale per API, git e
+  # (se l'IdP è GitLab stesso) per il login della dashboard. Va montato nei container
+  # orchestrator e web (vedi docker-compose.yml). Il sandbox non lo riceve.
+  # ca_bundle: /etc/autofix/gitlab-ca.pem
 
 schedule:
   timezone: Europe/Rome
@@ -19,11 +23,14 @@ budget:
   max_mrs_per_night: 3
   max_attempts: 2
   max_iterations: 30
+  discovery_per_repo_usd: 0.15  # `maxtac repos discover`: tetto per repo
+  discovery_max_iterations: 12
 
 models:
   triage: claude-haiku-5-5
   fix: claude-sonnet-5-5
   hunt: claude-opus-5-5
+  discovery: claude-haiku-5-5   # propone linguaggi e comandi di setup/test dei repo nuovi
 
 anthropic:
   timeout_s: 600
@@ -60,23 +67,25 @@ notify:
 
 ui:
   default_theme: neutral
-  themes:
-    alex: cyberpunk
+  themes:                         # per email (o username se web.user_claim: username)
+    alice@example.com: cyberpunk
 
-# Dashboard web (`maxtac web`, servizio `web` del compose). Login OIDC con PKCE: per GitLab
-# crea un'Application (Admin o del gruppo) con scope openid e profile, confidential, redirect
-# URI qui sotto. Segreti: /run/secrets/oidc_client_secret e /run/secrets/web_session_secret.
+# Dashboard web (`maxtac web`, servizio `web` del compose). Login OIDC con PKCE: su GitLab
+# crea un'Application (Admin > Applications, o del gruppo) confidential, scope openid, profile
+# ed email, redirect URI qui sotto. L'issuer è l'URL di GitLab.
+# Segreti: /run/secrets/oidc_client_secret e /run/secrets/web_session_secret.
 web:
-  allowed_users: [alex]           # username GitLab; tutti gli altri ricevono 403
+  user_claim: email               # email verificata dell'id_token (email_verified: true)
+  allowed_users: [alice@example.com, bob@example.com]   # tutti gli altri ricevono 403
   oidc:
     issuer: https://gitlab.example.it
     client_id: "<application id>"
     redirect_uri: https://autofix.example.it/auth/callback
-    scopes: [openid, profile]
-    username_claims: [preferred_username, nickname]
+    scopes: [openid, profile, email]
+    username_claims: [preferred_username, nickname]   # usati solo con user_claim: username
   session_max_age_s: 28800
   trusted_proxies: []             # es. ["172.16.0.0/12"] se il reverse proxy passa X-Forwarded-For
-  # dev_user: alex                # solo `maxtac web --dev`, bind su loopback
+  # dev_user: alice@example.com   # solo `maxtac web --dev`, bind su loopback
 
 # Container effimeri per scan, fix e verifica. Mai root; nessun segreto dentro.
 sandbox:
@@ -100,12 +109,15 @@ scanners:
 workdir: /var/lib/autofix/work
 db_path: /var/lib/autofix/autofix.sqlite3
 
+# Repo scritti a mano (config di fiducia). Si possono anche scoprire con
+# `maxtac repos discover` e approvare con `maxtac repos approve`: in caso di conflitto vince
+# questa lista. Può restare vuota.
 repos:
-  - project: alex/ecs2
+  - project: team/api
     languages: [python]
     setup_command: pip install -r requirements.txt
     test_command: pytest -q
-  - project: alex/fwagent
+  - project: team/agent
     languages: [go]
     test_command: go test ./...
 

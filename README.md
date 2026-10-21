@@ -17,6 +17,7 @@ spesa espliciti.
 | 4 | Bug hunting a rotazione, test di regressione che fallisce sul base, storico run, notifica | fatta |
 | 5a | API della dashboard in sola lettura, login OIDC, temi per utente | fatta |
 | 5b | SPA della dashboard (SvelteKit) dai mockup approvati, tema per utente caricato a runtime | fatta |
+| 6a | Autodiscovery dei repo con approvazione da CLI, utenti per email, GitLab interno con CA privata | fatta |
 
 Tutte le fasi sono verificate in locale (git reale, bandit reale, GitLab e modello finti). Cosa
 resta da verificare solo sulla VM vera è in [Go-live](#go-live).
@@ -171,8 +172,8 @@ uv run ruff check src tests && uv run mypy src
 
 cp config.example.yaml config.yaml   # adatta workdir e db_path per l'uso locale
 uv run maxtac --config config.yaml status
-GITLAB_TOKEN=... uv run maxtac --config config.yaml run --repo alex/ecs2 --scan-only
-ANTHROPIC_API_KEY=... GITLAB_TOKEN=... uv run maxtac --config config.yaml run --repo alex/ecs2 --dry-run
+GITLAB_TOKEN=... uv run maxtac --config config.yaml run --repo team/api --scan-only
+ANTHROPIC_API_KEY=... GITLAB_TOKEN=... uv run maxtac --config config.yaml run --repo team/api --dry-run
 ```
 
 Il test d'integrazione con un Docker reale è skippato di default:
@@ -184,11 +185,53 @@ Comandi:
 - `maxtac run --scan-only`: solo checkout e scan (tutti gli scanner, zero token): stampa i
   finding normalizzati e li scrive in `workdir/<run_id>/findings.json`. Non tocca lo store;
 - `maxtac patrol`: resta in esecuzione e lancia la run all'ora configurata (`schedule`);
-- `maxtac status`: spesa del mese, finding tracciati, MR aperte, ultime run.
+- `maxtac status`: spesa del mese, finding tracciati, MR aperte, ultime run;
+- `maxtac repos ...`: autodiscovery e approvazione dei repo (vedi sotto).
 
 Senza token GitLab o chiave Anthropic il codice d'uscita è 2, con un messaggio che dice cosa
 manca (mai il valore). `patrol` sopravvive a una run fallita: logga l'errore e aspetta la
 finestra successiva, ricostruendo la pipeline a ogni notte.
+
+## Autodiscovery dei repo
+
+Invece di scrivere a mano `languages`, `setup_command` e `test_command` di ogni repo, si
+possono far proporre:
+
+```bash
+maxtac repos discover --all                 # tutti i progetti del bot non ancora noti
+maxtac repos discover --project team/api    # uno (ripetibile); ridiscovery di un approvato
+maxtac repos discover --project team/api --no-llm   # solo rilevamento deterministico, 0 token
+maxtac repos list                            # config, approvati e proposte in attesa
+maxtac repos show team/api                   # proposta completa, baseline, differenze
+maxtac repos approve team/api [--edit] [--force]
+maxtac repos reject team/api
+maxtac repos remove team/api                 # solo repo approvati, non quelli del config
+```
+
+Per ogni progetto: checkout blindato come nella run notturna, rilevamento deterministico dei
+file noti (`pyproject.toml`, `requirements*.txt`, `go.mod`, `package.json` e lockfile,
+`Makefile`, `tox.ini`, `noxfile.py`; `.gitlab-ci.yml` solo come indizio), poi un loop agentico
+breve (`models.discovery`, default Haiku; tetto `budget.discovery_per_repo_usd`, default
+$0,15; massimo `budget.discovery_max_iterations` passi) con i tool `list_files`, `read_file` e
+`run`, senza `write_file`. Il modello chiude con `submit_config`; se non lo fa, finisce il
+budget o la risposta non è valida, vale il rilevamento deterministico. Infine la **baseline**:
+working tree riportata al commit base e, in un sandbox nuovo, `setup_command` e `test_command`
+sul codice base. Durata, esito e coda dell'output finiscono nella proposta.
+
+**I comandi proposti sono input non fidato** (vengono dal contenuto del repo e da un modello
+che l'ha letto). Restano una proposta `pending` nella tabella `repo_proposals` finché un
+umano non li approva dalla CLI dell'orchestrator; la dashboard li mostra solo in lettura.
+`approve` rifiuta senza `--force` se la baseline non è verde o se i comandi sono sospetti:
+banali (`true`, `exit 0`, `echo`), senza un test runner noto, che ignorano i fallimenti
+(`|| true`), che usano la rete (`curl`, `wget`, `ssh`...), che pubblicano o fanno push, che
+scrivono fuori da `/work` o chiedono privilegi. Con `--edit` i comandi si correggono in
+`$EDITOR` e vengono ricontrollati (la baseline si riferisce a quelli originali). In ogni caso
+i comandi girano solo nel sandbox, senza segreti e con la sola rete dei registry.
+
+La run notturna usa i repo del `config.yaml` **più** quelli approvati; in caso di conflitto
+vince il `config.yaml`, che resta la fonte di fiducia scritta a mano (e `repos:` può essere
+vuoto). Una nuova discovery di un repo approvato crea una proposta nuova senza toccare
+l'approvato e ne mostra le differenze; la proposta pending precedente diventa `superseded`.
 
 ## Temi di presentazione
 
@@ -227,10 +270,19 @@ minuto), `iss`, `aud`/`azp`, `exp`. Sessione in cookie firmato `HttpOnly`, `Secu
 `SameSite=Lax`. Accesso solo agli utenti di `web.allowed_users`, ricontrollato a ogni
 richiesta. Rate limit sul login per client.
 
-Su GitLab: *Admin → Applications* (o le Applications di un gruppo), confidential, scope
-`openid` e `profile`, redirect URI `https://<host della dashboard>/auth/callback`. L'Application
-ID va in `web.oidc.client_id`, il secret in `secrets/oidc_client_secret`; la chiave delle
-sessioni è una stringa casuale di almeno 32 caratteri:
+**Utenti per email.** Con `web.user_claim: email` (default) l'utente è l'email dell'id_token,
+accettata solo con `email_verified: true` (GitLab la mette per le email confermate):
+un'email non verificata la sceglie l'utente stesso e non identifica nessuno. `allowed_users` e
+`ui.themes` si scrivono per email e il confronto ignora maiuscole e minuscole. Lo scope `email`
+viene aggiunto da solo se manca. Con `user_claim: username` vale il primo claim di
+`web.oidc.username_claims`.
+
+**GitLab come IdP.** L'issuer OIDC è l'URL di GitLab (`web.oidc.issuer` uguale a
+`gitlab.url`). Su GitLab: *Admin → Applications* (o *Settings → Applications* di un gruppo),
+*Confidential* attivo, scope `openid`, `profile` ed `email`, redirect URI
+`https://<host della dashboard>/auth/callback`. L'Application ID va in `web.oidc.client_id`,
+il secret in `secrets/oidc_client_secret`; la chiave delle sessioni è una stringa casuale di
+almeno 32 caratteri:
 
 ```bash
 printf '%s' "$GITLAB_APP_SECRET" > secrets/oidc_client_secret
@@ -258,6 +310,17 @@ sempre attivi: CSP stretta (`'self'`, niente `'unsafe-inline'`), `X-Frame-Option
 risposte; diff e output dei test sono testo semplice, da mostrare escaped.
 
 Per sviluppare: `web.dev_user` in config e `maxtac web --dev` (solo su loopback, nessun login).
+
+### GitLab self-hosted su rete interna
+
+Orchestrator e dashboard parlano con GitLab dalla rete della VM; i sandbox **no**: la loro
+unica uscita è il proxy, la cui allowlist contiene solo i registry dei pacchetti (un test
+fallisce se cambia o se include l'host di GitLab). Se il certificato di GitLab è firmato da
+una CA interna, metti il bundle PEM in `ca/gitlab-ca.pem`, decommenta il mount nel compose
+(orchestrator e web) e imposta `gitlab.ca_bundle: /etc/autofix/gitlab-ca.pem`. Il bundle vale
+per le API (python-gitlab), per git (`http.<url di GitLab>.sslCAInfo`, passato in ambiente
+come il token) e per il login OIDC, ma solo se l'issuer è GitLab stesso: con un IdP pubblico
+sostituirebbe le CA di sistema. Il sandbox non lo riceve.
 
 ### Frontend (`frontend/`)
 

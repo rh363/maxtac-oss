@@ -170,15 +170,21 @@ class GitLabVCS:
         client: Any | None = None,
         remote_url: Callable[[str], str] | None = None,
         allow_file_protocol: bool = False,  # solo nei test, con remoti locali
+        ca_bundle: Path | None = None,  # CA interna di un GitLab self-hosted
     ) -> None:
         self.url = url.rstrip("/")
         self._token = token
         self.bot_name = bot_name
         self.bot_email = bot_email
+        self.ca_bundle = ca_bundle
         if client is None:
             import gitlab
 
-            client = gitlab.Gitlab(self.url, private_token=token)
+            client = gitlab.Gitlab(
+                self.url,
+                private_token=token,
+                ssl_verify=str(ca_bundle) if ca_bundle else True,
+            )
         self._gl = client
         self._remote_url = remote_url or (lambda project: f"{self.url}/{project}.git")
         self._allow_file = allow_file_protocol
@@ -207,6 +213,13 @@ class GitLabVCS:
         )
         return len(list(mrs)) > 0
 
+    def list_projects(self) -> list[str]:
+        # Developer (30) in su: serve per pushare un branch e aprire la MR
+        projects = self._gl.projects.list(
+            membership=True, archived=False, min_access_level=30, iterator=True
+        )
+        return sorted(str(p.path_with_namespace) for p in projects)
+
     def open_mr(
         self, repo: RepoConfig, branch: str, title: str, body: str, labels: Sequence[str]
     ) -> str:
@@ -227,11 +240,14 @@ class GitLabVCS:
 
     def _auth_env(self) -> dict[str, str]:
         basic = base64.b64encode(f"oauth2:{self._token}".encode()).decode()
-        return {
-            "GIT_CONFIG_COUNT": "1",
-            "GIT_CONFIG_KEY_0": f"http.{self.url}/.extraHeader",
-            "GIT_CONFIG_VALUE_0": f"Authorization: Basic {basic}",
-        }
+        pairs = [(f"http.{self.url}/.extraHeader", f"Authorization: Basic {basic}")]
+        if self.ca_bundle is not None:
+            pairs.append((f"http.{self.url}/.sslCAInfo", str(self.ca_bundle)))
+        env = {"GIT_CONFIG_COUNT": str(len(pairs))}
+        for i, (k, v) in enumerate(pairs):
+            env[f"GIT_CONFIG_KEY_{i}"] = k
+            env[f"GIT_CONFIG_VALUE_{i}"] = v
+        return env
 
     def _git(
         self, co: Checkout | None, gitdir: Path | None = None, worktree: Path | None = None

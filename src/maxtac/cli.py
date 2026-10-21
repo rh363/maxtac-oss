@@ -13,6 +13,7 @@ import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from maxtac import cli_repos
 from maxtac.config import DEFAULT_CONFIG_PATH, AppConfig, load_config, load_secrets
 from maxtac.container import Container, MissingSecret
 from maxtac.domain.models import RepoConfig, RunReport
@@ -46,6 +47,7 @@ def _parser() -> argparse.ArgumentParser:
 
     sub.add_parser("patrol", help="resta in esecuzione e lancia la run all'ora configurata")
     sub.add_parser("status", help="spesa del mese, finding e MR aperte")
+    cli_repos.add_parser(sub)
 
     web = sub.add_parser("web", help="dashboard web in sola lettura")
     web.add_argument("--host", help="indirizzo di bind (default: web.host)")
@@ -90,11 +92,20 @@ def _write_report(cfg: AppConfig, report: RunReport) -> Path:
 
 
 def _selected_repos(c: Container, args: argparse.Namespace) -> list[RepoConfig] | None:
-    repos = c.config.to_repos()
+    repos = c.repos()
+    if not repos:
+        print(
+            "nessun repo: aggiungili al config.yaml o approvali con `maxtac repos`",
+            file=sys.stderr,
+        )
+        return None
     if args.repo:
         unknown = set(args.repo) - {r.project for r in repos}
         if unknown:
-            print(f"repo non presenti in config: {', '.join(sorted(unknown))}", file=sys.stderr)
+            print(
+                f"repo non configurati né approvati: {', '.join(sorted(unknown))}",
+                file=sys.stderr,
+            )
             return None
         repos = [r for r in repos if r.project in args.repo]
     return repos
@@ -134,7 +145,7 @@ def patrol_once(c: Container, lx: Lexicon, sleep: Callable[[float], None] = time
         sleep(min(delay, 300))
     try:
         # la pipeline si ricostruisce a ogni notte: segreti e config ruotati vengono riletti
-        report = c.pipeline(dry_run=False).run_night(c.config.to_repos())
+        report = c.pipeline(dry_run=False).run_night(c.repos())
         print(render_run(report, lx), flush=True)
         _write_report(c.config, report)
     except Exception:
@@ -167,7 +178,11 @@ def cmd_status(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
     return 0
 
 
-COMMANDS = {"run": cmd_run, "patrol": cmd_patrol, "status": cmd_status}
+def cmd_repos(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
+    return cli_repos.run(c, args)
+
+
+COMMANDS = {"run": cmd_run, "patrol": cmd_patrol, "status": cmd_status, "repos": cmd_repos}
 
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 

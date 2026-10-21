@@ -12,9 +12,18 @@ from maxtac.adapters.docker_sandbox import DockerSandbox, SandboxSpec
 from maxtac.adapters.gitlab_vcs import GitLabVCS
 from maxtac.adapters.notifier import NoopNotifier, WebhookNotifier
 from maxtac.adapters.scanners import build_scanners
-from maxtac.adapters.sqlite_store import SqliteBudget, SqliteRunStore, SqliteStore, connect
+from maxtac.adapters.sqlite_store import (
+    SqliteBudget,
+    SqliteRepoRegistry,
+    SqliteRunStore,
+    SqliteStore,
+    connect,
+)
 from maxtac.config import AppConfig, Secrets, load_secrets
+from maxtac.domain.models import RepoConfig
+from maxtac.domain.policy import merge_repos
 from maxtac.domain.ports import NotifierPort, ScannerPort
+from maxtac.services.discovery import Discovery, DiscoverySettings
 from maxtac.services.pipeline import Pipeline
 from maxtac.services.scan import ScanService
 
@@ -34,13 +43,25 @@ class Container:
     store: SqliteStore
     budget: SqliteBudget
     runs: SqliteRunStore
+    registry: SqliteRepoRegistry
     clock: Callable[[], datetime] = utcnow
     secrets: Secrets = field(default_factory=load_secrets)
 
     @classmethod
     def build(cls, config: AppConfig) -> Container:
         conn = connect(config.db_path)
-        return cls(config, conn, SqliteStore(conn), SqliteBudget(conn), SqliteRunStore(conn))
+        return cls(
+            config,
+            conn,
+            SqliteStore(conn),
+            SqliteBudget(conn),
+            SqliteRunStore(conn),
+            SqliteRepoRegistry(conn),
+        )
+
+    def repos(self) -> list[RepoConfig]:
+        """Repo del config.yaml più quelli approvati dall'autodiscovery. Vince il config."""
+        return merge_repos(self.config.to_repos(), (a.repo for a in self.registry.approved_repos()))
 
     def vcs(self) -> GitLabVCS:
         token = self.secrets.gitlab_token
@@ -52,6 +73,7 @@ class Container:
             token=token.get_secret_value().strip(),
             bot_name=g.bot_name,
             bot_email=g.commit_email(),
+            ca_bundle=g.ca_bundle,
         )
 
     def sandboxes(self) -> DockerSandbox:
@@ -71,7 +93,8 @@ class Container:
         )
 
     def scanners(self) -> list[ScannerPort]:
-        return list(build_scanners(self.config.semgrep_rulesets()))
+        langs = {lang for r in self.repos() for lang in r.languages}
+        return list(build_scanners(self.config.semgrep_rulesets(langs)))
 
     def scan_service(self) -> ScanService:
         return ScanService(
@@ -125,6 +148,25 @@ class Container:
             clock=self.clock,
             runs=self.runs,
             notifier=self.notifier(),
+        )
+
+    def discovery(self, *, use_llm: bool) -> Discovery:
+        b = self.config.budget
+        return Discovery(
+            vcs=self.vcs(),
+            sandboxes=self.sandboxes(),
+            llm=self.llm() if use_llm else None,
+            registry=self.registry,
+            budget=self.budget,
+            pricing=self.config.to_pricing(),
+            settings=DiscoverySettings(
+                model=self.config.models.discovery,
+                per_repo_usd=b.discovery_per_repo_usd,
+                max_iterations=b.discovery_max_iterations,
+                workdir=self.config.workdir,
+                monthly_credits_usd=b.monthly_credits_usd,
+            ),
+            clock=self.clock,
         )
 
     def close(self) -> None:

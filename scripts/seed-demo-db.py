@@ -386,6 +386,7 @@ def main() -> None:
     ]
     cfg["ui"] = {"themes": {"alex": "cyberpunk"}}
     cfg["web"] = {
+        "user_claim": "username",  # demo in dev mode: utenti senza email
         "allowed_users": ["alex", "boss"],
         "dev_user": args.user,
         "static_dir": str(ROOT / "frontend" / "build"),

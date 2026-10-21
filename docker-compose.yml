@@ -16,6 +16,8 @@ services:
       - ./config.yaml:/etc/autofix/config.yaml:ro
       - /var/lib/autofix:/var/lib/autofix   # stesso path su host e container: i bind mount dei sandbox funzionano
       - /var/run/docker.sock:/var/run/docker.sock
+      # GitLab interno con CA privata: decommenta e imposta gitlab.ca_bundle in config.yaml
+      # - ./ca/gitlab-ca.pem:/etc/autofix/gitlab-ca.pem:ro
     networks: [egress]
     read_only: true
     tmpfs: [/tmp]
@@ -55,6 +57,7 @@ services:
     volumes:
       - ./config.yaml:/etc/autofix/config.yaml:ro
       - /var/lib/autofix:/var/lib/autofix:ro
+      # - ./ca/gitlab-ca.pem:/etc/autofix/gitlab-ca.pem:ro   # login OIDC verso GitLab interno
     ports: ["127.0.0.1:8080:8080"]
     networks: [web]
     read_only: true

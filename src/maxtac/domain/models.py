@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 FindingKind = Literal["cve", "sast", "bug"]
+Language = Literal["python", "go", "javascript", "typescript"]
+LANGUAGES: tuple[Language, ...] = ("python", "go", "javascript", "typescript")
 
 
 class Severity(IntEnum):
@@ -167,6 +169,51 @@ class RepoConfig:
     @property
     def slug(self) -> str:
         return self.project.replace("/", "__")
+
+
+class ProposalStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    SUPERSEDED = "superseded"  # sostituita da una discovery più recente dello stesso repo
+
+
+@dataclass(frozen=True)
+class RepoProposal:
+    """Config di un repo proposta dall'autodiscovery. È input non fidato (viene dal contenuto
+    del repo e dal modello che l'ha letto): diventa config di fiducia solo con
+    `maxtac repos approve`, eseguito da un umano sull'orchestrator."""
+
+    project: str
+    languages: tuple[Language, ...]
+    setup_command: str | None
+    test_command: str
+    rationale: str
+    baseline_ok: bool | None  # setup + test verdi sul codice base; None = non eseguita
+    baseline_output: str
+    duration_s: float
+    cost_usd: float
+    created_at: datetime
+    suspicious: tuple[str, ...] = ()  # motivi per cui i comandi vanno guardati con attenzione
+    status: ProposalStatus = ProposalStatus.PENDING
+    default_branch: str | None = None
+    id: int | None = None
+
+    def to_repo(self) -> RepoConfig:
+        return RepoConfig(
+            project=self.project,
+            languages=self.languages,
+            test_command=self.test_command,
+            setup_command=self.setup_command,
+        )
+
+
+@dataclass(frozen=True)
+class ApprovedRepo:
+    repo: RepoConfig
+    approved_at: datetime
+    approved_by: str
+    proposal_id: int | None
 
 
 @dataclass(frozen=True)

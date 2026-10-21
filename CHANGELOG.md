@@ -9,6 +9,21 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+
+- Fase 6a, autodiscovery dei repo: `maxtac repos discover [--project X | --all] [--no-llm]`
+  propone linguaggi e comandi di setup/test (rilevamento deterministico, poi un loop agentico
+  breve in sola lettura con tetto `budget.discovery_per_repo_usd`), esegue una baseline sul
+  commit base in un sandbox nuovo e salva una proposta `pending`. `repos list`, `show`,
+  `approve [--edit] [--force]`, `reject` e `remove` la gestiscono; i repo approvati entrano
+  nella run notturna (in caso di conflitto vince `config.yaml`).
+- Controllo dei comandi scoperti: test banali, `|| true`, strumenti di rete, publish/push,
+  scritture fuori da `/work`, privilegi. Per approvarli serve `--force`.
+- Porta `RepoRegistry` con le tabelle SQLite `repo_proposals` e `repos`, leggibili anche dalla
+  dashboard.
+- Utenti della dashboard per email verificata (`web.user_claim: email`, default): allowlist e
+  `ui.themes` per email, senza distinzione di maiuscole; scope `email` aggiunto da solo.
+- `gitlab.ca_bundle` per un GitLab self-hosted con CA interna (API, git e login OIDC quando
+  l'issuer è GitLab).
 - Fase 5b: SPA della dashboard in `frontend/` (SvelteKit SPA, Svelte 5, TypeScript, Tailwind,
   Zod, Lucide) dai mockup approvati: dashboard, finding con filtri nell'URL, storico e dettaglio
   delle run con timeline per repo, dettaglio task con diff e output dei test. Responsive.
@@ -82,6 +97,10 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Security
 
+
+- Un test verifica che l'allowlist del proxy dei sandbox contenga solo i registry dei
+  pacchetti e mai l'host di GitLab.
+- Login rifiutato con claim `email` mancante o `email_verified` diverso da `true`.
 - Descrizione, titolo e commit delle MR: campi non fidati sanificati (niente a capo, `|`,
   backtick, menzioni), testo del modello e output dei test in blocchi di codice, nessuna riga
   che inizi con `/` (quick action GitLab).
@@ -106,6 +125,9 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Changed
 
+
+- `repos` in `config.yaml` può essere vuoto. `config.example.yaml` usa solo domini d'esempio
+  (lo verifica un test).
 - Tema dell'operatore attenuato come da mockup approvato: etichette funzionali chiare in
   CLI e dashboard, il tema resta in marchio, sottotitoli secondari, colori e font; la valuta è
   sempre `$`. Lessico con override `ui` per le etichette della dashboard.

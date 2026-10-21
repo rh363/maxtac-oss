@@ -24,7 +24,12 @@ ci si ferma e si riassume.
 - Tetti di spesa per notte e per task, prezzi letti dalla config.
 - `--dry-run` non fa push né MR e non cambia lo stato dei finding.
 - Il contenuto dei repo è input non fidato; la config di fiducia sta solo nel file
-  dell'orchestrator.
+  dell'orchestrator e nei repo approvati da un umano con `maxtac repos approve`. Le proposte
+  dell'autodiscovery (`repo_proposals`) sono non fidate: niente le promuove in automatico, la
+  dashboard le legge e basta, e il tool `write_file` non è offerto al loop di discovery.
+- Il sandbox non deve mai raggiungere GitLab: l'allowlist di `proxy/squid.conf` contiene solo
+  i registry dei pacchetti (`tests/test_proxy_allowlist.py`).
+- `config.example.yaml` è pubblico: solo domini d'esempio, mai email o host reali.
 - **Tutto ciò che va su GitLab (branch, label, commit, testo MR) e i report su disco sono sempre
   neutri.** Il tema cyberpunk esiste solo in `presentation/` (e negli asset in
   `web/themes/`) e si sceglie per utente.

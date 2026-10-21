@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .models import (
+    ApprovedRepo,
     AssistantTurn,
     Checkout,
     ExecResult,
@@ -19,7 +20,9 @@ from .models import (
     FindingRow,
     FindingStatus,
     Message,
+    ProposalStatus,
     RepoConfig,
+    RepoProposal,
     RunReport,
     RunSummary,
     StructuredResult,
@@ -100,6 +103,10 @@ class VCSPort(Protocol):
     ) -> str: ...
 
     def has_open_mr(self, repo: RepoConfig, branch: str) -> bool: ...
+
+    def list_projects(self) -> list[str]:
+        """Progetti non archiviati su cui il bot può aprire MR (candidati all'autodiscovery)."""
+        ...
 
 
 class Sandbox(Protocol):
@@ -206,6 +213,31 @@ class RunStore(Protocol):
     def recent_runs(self, limit: int, offset: int = 0) -> list[RunSummary]: ...
 
     def get_run(self, run_id: str) -> dict[str, Any] | None: ...
+
+
+class RepoRegistry(Protocol):
+    """Repo scoperti dall'autodiscovery: proposte (non fidate) e repo approvati dall'operatore."""
+
+    def save_proposal(self, proposal: RepoProposal) -> int:
+        """Salva una proposta pending; quella pending precedente dello stesso repo diventa
+        superseded. Ritorna l'id."""
+        ...
+
+    def pending_proposal(self, project: str) -> RepoProposal | None: ...
+
+    def list_proposals(self, status: ProposalStatus | None = None) -> list[RepoProposal]: ...
+
+    def approve(self, proposal: RepoProposal, repo: RepoConfig, by: str, at: datetime) -> None:
+        """`repo` è la config approvata (eventualmente corretta a mano rispetto alla proposta)."""
+        ...
+
+    def reject(self, project: str) -> bool: ...
+
+    def remove(self, project: str) -> bool: ...
+
+    def approved(self, project: str) -> ApprovedRepo | None: ...
+
+    def approved_repos(self) -> list[ApprovedRepo]: ...
 
 
 class NotifierPort(Protocol):

@@ -29,11 +29,11 @@ def _config(tmp_path: Path) -> Path:
 def test_scan_only_lists_normalized_findings(tmp_path: Path, monkeypatch: Any, capsys: Any) -> None:
     gl = FakeGitLab(
         repos={
-            "alex/ecs2": {"requirements.txt": "requests==2.19.0\n", "app.py": "eval(x)\n"},
-            "alex/fwagent": {"go.mod": "module x\n"},
+            "team/api": {"requirements.txt": "requests==2.19.0\n", "app.py": "eval(x)\n"},
+            "team/agent": {"go.mod": "module x\n"},
         }
     )
-    gl.broken.add("alex/fwagent")
+    gl.broken.add("team/agent")
     vcs = FakeVCS(gl)
 
     def scan_service(self: Container) -> ScanService:
@@ -56,10 +56,10 @@ def test_scan_only_lists_normalized_findings(tmp_path: Path, monkeypatch: Any, c
     assert "python.lang.security.audit.eval" in out
     files = list((tmp_path / "work").glob("*/findings.json"))
     data = json.loads(files[0].read_text())
-    ecs2 = next(r for r in data["repos"] if r["project"] == "alex/ecs2")
+    ecs2 = next(r for r in data["repos"] if r["project"] == "team/api")
     assert {f["kind"] for f in ecs2["findings"]} == {"cve", "sast"}
     assert all(f["status"] == "new" for f in ecs2["findings"])
-    fw = next(r for r in data["repos"] if r["project"] == "alex/fwagent")
+    fw = next(r for r in data["repos"] if r["project"] == "team/agent")
     assert fw["errors"]
     assert not gl.pushed and not gl.mrs
 

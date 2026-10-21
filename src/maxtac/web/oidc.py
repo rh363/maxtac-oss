@@ -57,7 +57,9 @@ class OIDCClient:
         redirect_uri: str,
         scopes: Sequence[str],
         username_claims: Sequence[str],
+        user_claim: str = "email",
         timeout_s: float = 10.0,
+        ca_bundle: str | None = None,
         transport: httpx.BaseTransport | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
@@ -67,7 +69,13 @@ class OIDCClient:
         self.redirect_uri = redirect_uri
         self.scopes = list(scopes)
         self.username_claims = list(username_claims)
-        self._http = httpx.Client(timeout=timeout_s, transport=transport, follow_redirects=False)
+        self.user_claim = user_claim
+        self._http = httpx.Client(
+            timeout=timeout_s,
+            transport=transport,
+            follow_redirects=False,
+            verify=ca_bundle or True,  # CA interna di un GitLab self-hosted
+        )
         self._clock = clock
         self._lock = threading.Lock()
         self._discovery: tuple[float, dict[str, Any]] | None = None
@@ -192,6 +200,14 @@ class OIDCClient:
         return claims
 
     def username(self, claims: dict[str, Any]) -> str | None:
+        """Identità dell'utente: l'email verificata (default) o lo username."""
+        if self.user_claim == "email":
+            email = claims.get("email")
+            # Un'email non verificata la sceglie l'utente stesso: non identifica nessuno.
+            if claims.get("email_verified") is not True or not isinstance(email, str):
+                return None
+            email = email.strip()
+            return email.casefold() if "@" in email else None
         for claim in self.username_claims:
             value = claims.get(claim)
             if isinstance(value, str) and value:
