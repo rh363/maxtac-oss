@@ -51,7 +51,7 @@ from maxtac.domain.ports import (
 
 from .hunter import Hunter
 from .merge_request import commit_message, mr_body, mr_title
-from .ripperdoc import Ripperdoc
+from .ripperdoc import AgentOutcome, Ripperdoc
 from .scan import applicable, run_scanners
 from .trauma import Triage
 
@@ -313,6 +313,23 @@ class Pipeline:
         baseline: frozenset[str],
         night: _Night,
     ) -> FixResult:
+        """Fix, verifica e MR di un task; l'esito riporta anche i passi fatti dall'agente."""
+        trace: list[AgentOutcome] = []
+        result = self._fix_task(co, repo, task, scanners, baseline, night, trace)
+        if not trace:
+            return result
+        return replace(result, iterations=trace[0].iterations, agent_stop=trace[0].stop)
+
+    def _fix_task(
+        self,
+        co: Checkout,
+        repo: RepoConfig,
+        task: Task,
+        scanners: Sequence[ScannerPort],
+        baseline: frozenset[str],
+        night: _Night,
+        trace: list[AgentOutcome],
+    ) -> FixResult:
         lim = self.settings.limits
         branch = branch_name(task, self.settings.branch_prefix)
         meter = night.budget.meter(f"fix:{repo.slug}:{task.fingerprint}", lim.per_task_usd)
@@ -321,6 +338,7 @@ class Pipeline:
             with self.sandboxes.open(co.worktree) as sb:
                 self._setup(repo, sb)
                 agent = self.ripperdoc.fix(repo, task, sb, meter)
+                trace.append(agent)
             if not agent.finished:
                 if agent.stop == "budget":
                     return self._budget_stop(repo, task, meter, branch)

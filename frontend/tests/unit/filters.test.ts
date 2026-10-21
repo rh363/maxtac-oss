@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PAGE_SIZE, parseFilters, toApi, toSearch } from '$lib/filters';
+import { MAX_QUERY, PAGE_SIZE, parseFilters, toApi, toSearch } from '$lib/filters';
 
 describe('filtri nell URL', () => {
 	it('legge solo valori validi', () => {
@@ -33,5 +33,14 @@ describe('filtri nell URL', () => {
 			limit: PAGE_SIZE,
 			offset: PAGE_SIZE
 		});
+	});
+	it('ricerca testuale: spazi tolti, lunghezza limitata, nell URL e verso l API', () => {
+		const v = parseFilters(new URLSearchParams('q=%20requests%20&status=new'));
+		expect(v.q).toBe('requests');
+		expect(toSearch(v)).toBe('?status=new&q=requests');
+		expect(toApi(v).q).toBe('requests');
+		expect(parseFilters(new URLSearchParams('q=%20%20')).q).toBeUndefined();
+		const long = parseFilters(new URLSearchParams(`q=${'x'.repeat(500)}`));
+		expect(long.q).toHaveLength(MAX_QUERY);
 	});
 });

@@ -17,6 +17,27 @@ const demo = (user: string, port: number) => {
 	};
 };
 
+// Ogni progetto esegue i test comuni più quelli del proprio utente: nessun test viene
+// saltato. Gli screenshot per la documentazione sono progetti a parte, solo con SCREENSHOTS=1.
+const OPERATOR = { baseURL: 'http://127.0.0.1:8791' };
+const NEUTRAL = { baseURL: 'http://127.0.0.1:8792' };
+const shots = process.env.SCREENSHOTS
+	? [
+			{
+				name: 'shots-operator',
+				testMatch: 'screenshots.shot.ts',
+				use: OPERATOR,
+				metadata: { theme: 'operator' }
+			},
+			{
+				name: 'shots-neutral',
+				testMatch: 'screenshots.shot.ts',
+				use: NEUTRAL,
+				metadata: { theme: 'neutral' }
+			}
+		]
+	: [];
+
 export default defineConfig({
 	testDir: 'tests/e2e',
 	fullyParallel: true,
@@ -29,7 +50,8 @@ export default defineConfig({
 	},
 	webServer: [demo('alex', 8791), demo('boss', 8792)],
 	projects: [
-		{ name: 'operator', use: { baseURL: 'http://127.0.0.1:8791' } },
-		{ name: 'neutral', use: { baseURL: 'http://127.0.0.1:8792' } }
+		{ name: 'operator', testMatch: ['common.spec.ts', 'operator.spec.ts'], use: OPERATOR },
+		{ name: 'neutral', testMatch: ['common.spec.ts', 'neutral.spec.ts'], use: NEUTRAL },
+		...shots
 	]
 });

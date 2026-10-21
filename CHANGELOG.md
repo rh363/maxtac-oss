@@ -9,6 +9,29 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+- Fase 6b, dashboard: pagina Repository (repo attivi con origine, comandi, rotazione del bug
+  hunting, finding per stato e MR aperte; proposte dell'autodiscovery con baseline, sospetti,
+  differenze dalla config attiva e comando `autofix repos approve` da copiare, senza scritture)
+  e pagina Impostazioni (config effettiva in sola lettura, senza segreti, path, utenti o temi).
+- Ricerca testuale nei finding (`/api/findings?q=`, anche nell'URL della SPA) su regola,
+  posizione, dettaglio e tool; `%` e `_` sono letterali. Il dettaglio dei finding ora è salvato
+  nello store (colonna `detail`, aggiunta in automatico ai db esistenti).
+- Passi dell'agente per task (`iterations` e `agent_stop` in `FixResult` e nei report salvati),
+  mostrati nel dettaglio della run e del task; i report precedenti restano validi.
+- Grafico della spesa giornaliera nella dashboard (`/api/spend/daily`): colonne impilate per
+  fix, bug hunting e triage/discovery, linea del tetto per notte, cumulato del mese contro i
+  crediti, dettaglio con mouse e tastiera, tabella dei dati.
+- Alias `autofix` del comando `maxtac`: è il nome mostrato dalla dashboard a ogni utente.
+- `scripts/seed-demo-db.py`: 30 giorni di spesa, repo con comandi diversi, un repo approvato e
+  proposte in attesa (una sospetta), sostituite e rifiutate.
+
+### Changed
+
+- E2E: ogni progetto Playwright esegue solo i test che lo riguardano (prima 6 test su 10
+  risultavano saltati per scelta del progetto o per gli screenshot); screenshot come progetti
+  separati con `SCREENSHOTS=1`.
+- `approval_blockers` in `domain/policy.py`: regole di `repos approve --force` condivise tra
+  CLI e dashboard.
 
 - Fase 6a, autodiscovery dei repo: `maxtac repos discover [--project X | --all] [--no-llm]`
   propone linguaggi e comandi di setup/test (rilevamento deterministico, poi un loop agentico

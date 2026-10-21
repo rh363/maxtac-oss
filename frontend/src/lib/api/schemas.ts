@@ -119,7 +119,9 @@ export const FixOut = z.object({
 	mr_url: z.string().nullable().default(null),
 	diff: z.string().default(''),
 	test_output: z.string().default(''),
-	triage_reason: z.string().default('')
+	triage_reason: z.string().default(''),
+	iterations: z.number().int().nullable().default(null),
+	agent_stop: z.string().nullable().default(null)
 });
 
 export const TriagedOut = z.object({ task: TaskOut, reason: z.string() });
@@ -160,7 +162,119 @@ export const TaskDetail = z.object({
 	branch: z.string().nullable().default(null),
 	mr_url: z.string().nullable().default(null),
 	diff: z.string().default(''),
-	test_output: z.string().default('')
+	test_output: z.string().default(''),
+	iterations: z.number().int().nullable().default(null),
+	agent_stop: z.string().nullable().default(null)
+});
+
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export const DaySpendOut = z.object({
+	date,
+	triage: z.number(),
+	fix: z.number(),
+	hunt: z.number(),
+	discovery: z.number(),
+	other: z.number(),
+	total: z.number()
+});
+
+export const MonthPointOut = z.object({ date, cumulative_usd: z.number() });
+
+export const SpendSeriesOut = z.object({
+	timezone: z.string(),
+	days: z.array(DaySpendOut),
+	month: z.array(MonthPointOut),
+	cap_usd: z.number(),
+	credits_usd: z.number()
+});
+
+export const RepoOut = z.object({
+	project: z.string(),
+	origin: z.enum(['config', 'approved']),
+	languages: z.array(z.string()),
+	setup_command: z.string().nullable(),
+	test_command: z.string(),
+	default_branch: z.string().nullable(),
+	approved_at: nullableDt,
+	last_hunted: nullableDt,
+	hunt_count: z.number().int(),
+	rotation: z.number().int(),
+	next_up: z.boolean(),
+	findings_by_status: z.record(z.string(), z.number().int()),
+	open_mrs: z.number().int()
+});
+
+export const FieldChangeOut = z.object({
+	field: z.string(),
+	active: z.string().nullable(),
+	proposed: z.string().nullable()
+});
+
+export const ProposalOut = z.object({
+	id: z.number().int().nullable(),
+	project: z.string(),
+	status: z.enum(['pending', 'superseded', 'rejected']),
+	languages: z.array(z.string()),
+	setup_command: z.string().nullable(),
+	test_command: z.string(),
+	default_branch: z.string().nullable(),
+	rationale: z.string(),
+	baseline_ok: z.boolean().nullable(),
+	baseline_output: z.string(),
+	duration_s: z.number(),
+	cost_usd: z.number(),
+	suspicious: z.array(z.string()),
+	blockers: z.array(z.string()),
+	created_at: dt,
+	approve_command: z.string().nullable(),
+	changes: z.array(FieldChangeOut)
+});
+
+export const ReposOut = z.object({ repos: z.array(RepoOut), proposals: z.array(ProposalOut) });
+
+export const ScheduleOut = z.object({ timezone: z.string(), at: z.string(), next_run_at: dt });
+export const FeaturesOut = z.object({ cve: z.boolean(), sast: z.boolean(), hunting: z.boolean() });
+export const ModelsOut = z.object({
+	triage: z.string(),
+	fix: z.string(),
+	hunt: z.string(),
+	discovery: z.string()
+});
+export const BudgetOut = z.object({
+	monthly_credits_usd: z.number(),
+	per_night_usd: z.number(),
+	per_task_usd: z.number(),
+	triage_per_repo_usd: z.number(),
+	hunting_per_night_usd: z.number(),
+	discovery_per_repo_usd: z.number()
+});
+export const LimitsOut = z.object({
+	max_mrs_per_night: z.number().int(),
+	max_attempts: z.number().int(),
+	max_iterations: z.number().int()
+});
+export const HuntingOut = z.object({
+	repos_per_night: z.number().int(),
+	lookback_days: z.number().int()
+});
+export const VCSOut = z.object({ branch_prefix: z.string(), mr_labels: z.array(z.string()) });
+export const PriceOut = z.object({
+	model: z.string(),
+	input: z.number(),
+	output: z.number(),
+	cache_read: z.number(),
+	cache_write: z.number()
+});
+export const SettingsOut = z.object({
+	schedule: ScheduleOut,
+	features: FeaturesOut,
+	models: ModelsOut,
+	budget: BudgetOut,
+	limits: LimitsOut,
+	hunting: HuntingOut,
+	vcs: VCSOut,
+	prices: z.array(PriceOut)
 });
 
 /** Pacchetto lessico di un tema: si usano solo gli override `ui`. */
@@ -184,7 +298,23 @@ export const CONTRACT = {
 	TriagedOut,
 	RepoRunOut,
 	RunDetail,
-	TaskDetail
+	TaskDetail,
+	DaySpendOut,
+	MonthPointOut,
+	SpendSeriesOut,
+	RepoOut,
+	FieldChangeOut,
+	ProposalOut,
+	ReposOut,
+	ScheduleOut,
+	FeaturesOut,
+	ModelsOut,
+	BudgetOut,
+	LimitsOut,
+	HuntingOut,
+	VCSOut,
+	PriceOut,
+	SettingsOut
 } as const;
 
 export type Me = z.infer<typeof Me>;
@@ -200,3 +330,9 @@ export type TaskDetail = z.infer<typeof TaskDetail>;
 export type Severity = z.infer<typeof Severity>;
 export type Status = z.infer<typeof Status>;
 export type Kind = z.infer<typeof Kind>;
+export type SpendSeries = z.infer<typeof SpendSeriesOut>;
+export type DaySpend = z.infer<typeof DaySpendOut>;
+export type ReposPage = z.infer<typeof ReposOut>;
+export type Repo = z.infer<typeof RepoOut>;
+export type Proposal = z.infer<typeof ProposalOut>;
+export type Settings = z.infer<typeof SettingsOut>;

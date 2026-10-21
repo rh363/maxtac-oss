@@ -10,19 +10,28 @@ assegnato, `boss` no (vede il tema di default). Usato anche dai test e2e del fro
 from __future__ import annotations
 
 import argparse
+import random
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from maxtac.adapters.sqlite_store import SqliteBudget, SqliteRunStore, SqliteStore, connect
+from maxtac.adapters.sqlite_store import (
+    SqliteBudget,
+    SqliteRepoRegistry,
+    SqliteRunStore,
+    SqliteStore,
+    connect,
+)
 from maxtac.domain.models import (
     Finding,
     FindingKind,
     FindingStatus,
     FixResult,
     Outcome,
+    ProposalStatus,
+    RepoProposal,
     RepoReport,
     RunReport,
     Severity,
@@ -261,6 +270,8 @@ def fix(
         kw.get("diff", ""),
         kw.get("tests", ""),
         kw.get("triage", ""),
+        iterations=kw.get("iterations"),
+        agent_stop=kw.get("stop", "end_turn" if kw.get("iterations") else None),
     )
 
 
@@ -278,6 +289,7 @@ def runs(now: datetime) -> list[RunReport]:
             128,
             diff=DIFF,
             tests=TESTS,
+            iterations=9,
             triage="Raggiungibile: billing_client.py usa una Session condivisa con verify=False. "
             "Bump minore senza API rimosse: fix.",
         ),
@@ -290,6 +302,7 @@ def runs(now: datetime) -> list[RunReport]:
             "tests/test_pagination_regression.py.",
             129,
             tests="215 passed in 39.02s",
+            iterations=17,
         ),
     ]
     ecs2.ignored.append((task_for("alex/ecs2", "GHSA-34jh-p97f-mpxf"), "Già coperto dal bump"))
@@ -303,8 +316,17 @@ def runs(now: datetime) -> list[RunReport]:
             Outcome.VERIFY_FAILED,
             0.38,
             "test rossi (exit=1): 2 test falliti in internal/proxy",
+            iterations=22,
         ),
-        fix("alex/fwagent", "symbol:watcher.run", Outcome.BUDGET_EXHAUSTED, 0.19, "tetto del task"),
+        fix(
+            "alex/fwagent",
+            "symbol:watcher.run",
+            Outcome.BUDGET_EXHAUSTED,
+            0.19,
+            "tetto del task",
+            iterations=14,
+            stop="budget",
+        ),
     ]
     oidc = RepoReport("alex/oidc-admin", findings_total=9, findings_new=1)
     oidc.fixes.append(
@@ -314,6 +336,7 @@ def runs(now: datetime) -> list[RunReport]:
             Outcome.NEEDS_HUMAN,
             0.22,
             "il fix tocca test o CI esistenti: tests/test_orm.py",
+            iterations=11,
         )
     )
     kube = RepoReport("alex/kube-billing", findings_total=4, findings_new=1)
@@ -325,6 +348,7 @@ def runs(now: datetime) -> list[RunReport]:
             0.29,
             "subprocess.run con lista di argomenti al posto di shell=True.",
             77,
+            iterations=6,
         )
     )
     edge = RepoReport("alex/edge-proxy", findings_total=3, findings_new=1)
@@ -349,6 +373,145 @@ def runs(now: datetime) -> list[RunReport]:
     ]
 
 
+# Config dei repo: in config.yaml, tranne quelli approvati dall'autodiscovery (vedi sotto)
+REPO_CONF = {
+    "alex/ecs2": (["python"], "pip install -r requirements.txt", "pytest -q"),
+    "alex/fwagent": (["go"], None, "go test ./..."),
+    "alex/edge-proxy": (["go"], None, "go test ./..."),
+    "alex/kube-billing": (["python"], "pip install -e .[test]", "pytest -q tests"),
+    "alex/oidc-admin": (["python", "typescript"], "pip install -r requirements.txt", "pytest -q"),
+}
+APPROVED = "alex/status-page"
+VITEST_OK = "Test Files  18 passed (18)\n     Tests  142 passed (142)\n  Duration  9.84s"
+
+
+def proposal(project: str, created: datetime, **kw: Any) -> RepoProposal:
+    base: dict[str, Any] = dict(
+        project=project,
+        languages=("typescript",),
+        setup_command="npm ci",
+        test_command="npm test",
+        rationale="package.json con script test (vitest) e package-lock.json presente.",
+        baseline_ok=True,
+        baseline_output=VITEST_OK,
+        duration_s=58.2,
+        cost_usd=0.034,
+        created_at=created,
+    )
+    return RepoProposal(**{**base, **kw})
+
+
+def seed_discovery(reg: SqliteRepoRegistry, now: datetime) -> None:
+    first = proposal(APPROVED, now - timedelta(days=12))
+    reg.save_proposal(first)
+    pending = reg.pending_proposal(APPROVED)
+    assert pending is not None
+    reg.approve(pending, pending.to_repo(), "operatore", now - timedelta(days=11))
+    # nuova discovery dello stesso repo: aggiornerebbe il comando di test
+    reg.save_proposal(
+        proposal(
+            APPROVED,
+            now - timedelta(days=2),
+            test_command="npm run test:ci",
+            rationale="Lo script test:ci aggiunge la coverage ed esce con codice != 0 se scende.",
+            baseline_output="Test Files  19 passed (19)\n     Tests  151 passed (151)",
+            cost_usd=0.029,
+        )
+    )
+    # proposta sospetta: ignora l'exit code dei test
+    reg.save_proposal(
+        proposal(
+            "alex/legacy-cron",
+            now - timedelta(days=1),
+            languages=("python",),
+            setup_command="pip install -r requirements.txt",
+            test_command="python -m pytest -q || true",
+            rationale="Il Makefile esegue i test con `|| true` nel target ci.",
+            baseline_ok=False,
+            baseline_output="E   ModuleNotFoundError: No module named 'cronlib'\n1 error in 0.41s",
+            duration_s=23.9,
+            cost_usd=0.041,
+            suspicious=("il test command ignora l'exit code (|| true)",),
+        )
+    )
+    # una proposta sostituita da una più recente e una rifiutata
+    reg.save_proposal(
+        proposal(
+            "alex/metrics-agent",
+            now - timedelta(days=6),
+            languages=("go",),
+            setup_command=None,
+            test_command="go test ./internal/...",
+            rationale="go.mod presente; test solo sotto internal/.",
+            duration_s=31.0,
+            cost_usd=0.018,
+        )
+    )
+    reg.save_proposal(
+        proposal(
+            "alex/metrics-agent",
+            now - timedelta(days=3),
+            languages=("go",),
+            setup_command=None,
+            test_command="go test ./...",
+            rationale="go.mod presente; pacchetti con test anche in cmd/.",
+            duration_s=44.6,
+            cost_usd=0.021,
+        )
+    )
+    reg.save_proposal(
+        proposal(
+            "alex/sandbox-experiments",
+            now - timedelta(days=9),
+            languages=("python",),
+            setup_command=None,
+            test_command="python run_all.py",
+            rationale="Nessun test runner riconosciuto; run_all.py sembra eseguire gli esempi.",
+            baseline_ok=None,
+            baseline_output="",
+            duration_s=4.1,
+            cost_usd=0.012,
+            suspicious=("nessun test runner noto nel comando",),
+        )
+    )
+    reg.reject("alex/sandbox-experiments")
+    assert {p.status for p in reg.list_proposals()} >= {
+        ProposalStatus.PENDING,
+        ProposalStatus.SUPERSEDED,
+        ProposalStatus.REJECTED,
+        ProposalStatus.APPROVED,
+    }
+
+
+def seed_spend(budget: SqliteBudget, now: datetime, history: list[RunReport]) -> None:
+    """30 notti di spesa realistica sotto il tetto di $3, con triage, fix e bug hunting.
+
+    Le notti con una run salvata usano la sua spesa, così dashboard e storico tornano."""
+    rng = random.Random(2077)
+    by_day = {r.started_at.date(): r for r in history if r.started_at is not None}
+    for back in range(30):
+        start = (now - timedelta(days=back)).replace(hour=0, minute=30, second=0, microsecond=0)
+        run = by_day.get(start.date())
+        total = run.spent_usd if run else round(rng.uniform(0.35, 2.6), 2)
+        run_id = run.run_id if run else start.strftime("%Y%m%dT%H%M%SZ")
+        triage = round(min(0.08, total * 0.05), 4)
+        hunt = round(min(1.0, total * rng.uniform(0.15, 0.35)), 4) if back % 3 != 1 else 0.0
+        fix_usd = max(0.0, round(total - triage - hunt, 4))
+        at = start
+        for scope, model, usd in (
+            ("triage:demo", "claude-haiku-5-5", triage),
+            ("fix:demo:task", "claude-sonnet-5-5", fix_usd),
+            ("hunt:demo", "claude-opus-5-5", hunt),
+        ):
+            if usd > 0:
+                at += timedelta(minutes=7)
+                budget.record(run_id, scope, model, usd, at)
+    # autodiscovery: spese a parte, di giorno
+    for days, usd in ((12, 0.034), (9, 0.012), (6, 0.018), (3, 0.021), (2, 0.029), (1, 0.041)):
+        when = (now - timedelta(days=days)).replace(hour=10, minute=15, second=0, microsecond=0)
+        budget.record(f"discovery-{days}", "discovery:demo", "claude-haiku-5-5", usd, when)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", type=Path, required=True)
@@ -371,10 +534,11 @@ def main() -> None:
             store.set_status(project, fd.fingerprint, status, reason, mr_url=url)
     for i, project in enumerate(["alex/ecs2", "alex/fwagent", "alex/oidc-admin"]):
         store.mark_hunted(project, now - timedelta(days=1 + i * 5))
-    for r in runs(now):
+    saved = runs(now)
+    for r in saved:
         history.save_run(r)
-        assert r.started_at is not None
-        budget.record(r.run_id, "fix:demo", "claude-sonnet-5-5", r.spent_usd, r.started_at)
+    seed_spend(budget, now, saved)
+    seed_discovery(SqliteRepoRegistry(conn), now)
     conn.close()
 
     cfg = yaml.safe_load((ROOT / "config.example.yaml").read_text(encoding="utf-8"))
@@ -382,7 +546,8 @@ def main() -> None:
     cfg["workdir"] = str(out / "work")
     cfg["features"] = {"cve": True, "sast": True, "hunting": True}
     cfg["repos"] = [
-        {"project": p, "languages": ["python"], "test_command": "pytest -q"} for p in REPOS
+        {"project": p, "languages": langs, "setup_command": setup, "test_command": test}
+        for p, (langs, setup, test) in REPO_CONF.items()
     ]
     cfg["ui"] = {"themes": {"alex": "cyberpunk"}}
     cfg["web"] = {

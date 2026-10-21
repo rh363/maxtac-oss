@@ -103,3 +103,12 @@ export function parseDiff(diff: string): {
 	}
 	return { lines, files: files.size, add, del };
 }
+
+const STOPS = ['end_turn', 'max_iterations', 'budget', 'max_tokens', 'refusal'] as const;
+
+/** Chiave del lessico per il motivo di arresto dell'agente (`stop.*`). */
+export function stopKey(stop: string | null): `stop.${(typeof STOPS)[number]}` | 'stop.other' {
+	return (STOPS as readonly string[]).includes(stop ?? '')
+		? (`stop.${stop}` as `stop.${(typeof STOPS)[number]}`)
+		: 'stop.other';
+}

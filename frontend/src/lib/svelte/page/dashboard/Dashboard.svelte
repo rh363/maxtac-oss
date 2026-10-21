@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api, type Dashboard } from '$lib/api';
+	import { api, type Dashboard, type SpendSeries } from '$lib/api';
 	import { Async, PageHeader } from '$lib/svelte/component';
 	import { t } from '$lib/lexicon/index.svelte';
 	import { money, percent } from '$lib/format';
@@ -7,6 +7,7 @@
 	import StatusBars from './components/StatusBars.svelte';
 	import HuntingRotation from './components/HuntingRotation.svelte';
 	import RecentRuns from './components/RecentRuns.svelte';
+	import SpendChart from './components/SpendChart.svelte';
 
 	let nonce = $state(0);
 	const promise = $derived.by<Promise<Dashboard>>(() => {
@@ -14,6 +15,11 @@
 		return api.dashboard();
 	});
 	const reload = () => nonce++;
+	let spendNonce = $state(0);
+	const spend = $derived.by<Promise<SpendSeries>>(() => {
+		void spendNonce;
+		return api.spendDaily(30);
+	});
 </script>
 
 <PageHeader title={t('dash.title')} subtitle={t('dash.subtitle')} />
@@ -56,6 +62,12 @@
 				sub={t('kpi.humanSub')}
 			/>
 		</div>
+
+		<Async promise={spend} retry={() => spendNonce++}>
+			{#snippet children(series: SpendSeries)}
+				<SpendChart data={series} />
+			{/snippet}
+		</Async>
 
 		<div class="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] gap-4">
 			<StatusBars counts={d.findings_by_status} />

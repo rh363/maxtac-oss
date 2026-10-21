@@ -40,14 +40,18 @@ from .schemas import (
     FindingPage,
     KindName,
     Me,
+    ReposOut,
     RunDetail,
     RunList,
     RunSummaryOut,
+    SettingsOut,
     SeverityName,
+    SpendSeriesOut,
     StatusName,
     TaskDetail,
 )
 from .security import RateLimiter, SecurityHeaders
+from .settings import settings_view
 from .spa import default_static_dir, mount_spa
 
 log = logging.getLogger(__name__)
@@ -193,6 +197,13 @@ def _repos(cfg: AppConfig, conn: sqlite3.Connection) -> list[RepoConfig]:
     return merge_repos(cfg.to_repos(), approved)
 
 
+def _has_table(conn: sqlite3.Connection, name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+    ).fetchone()
+    return row is not None
+
+
 def service(request: Request) -> Iterator[DashboardService]:
     st = _state(request)
     conn = st.db_connect()
@@ -212,6 +223,8 @@ def service(request: Request) -> Iterator[DashboardService]:
             max_mrs_per_night=cfg.budget.max_mrs_per_night,
             schedule_at=cfg.schedule.at,
             schedule_tz=cfg.schedule.timezone,
+            registry=SqliteRepoRegistry(conn) if _has_table(conn, "repo_proposals") else None,
+            config_projects=frozenset(r.project for r in cfg.repos),
         )
     finally:
         conn.close()
@@ -328,18 +341,20 @@ def _routes(app: FastAPI) -> None:
         severity: SeverityName | None = None,
         status: StatusName | None = None,
         repo: str | None = None,
+        q: Annotated[str | None, Query(max_length=200)] = None,
         limit: Annotated[int, Query(ge=1, le=200)] = 50,
         offset: Annotated[int, Query(ge=0)] = 0,
     ) -> FindingPage:
-        q = FindingQuery(
+        query = FindingQuery(
             project=repo,
             kind=kind,
             severity=Severity[severity.upper()] if severity else None,
             status=FindingStatus(status) if status else None,
+            q=q.strip() or None if q else None,
             limit=limit,
             offset=offset,
         )
-        rows, total = svc.findings(q)
+        rows, total = svc.findings(query)
         items = [
             FindingOut.model_validate(
                 {**asdict(r), "severity": r.severity.name.lower(), "status": r.status.value}
@@ -347,6 +362,27 @@ def _routes(app: FastAPI) -> None:
             for r in rows
         ]
         return FindingPage(items=items, total=total, limit=limit, offset=offset)
+
+    @app.get("/api/spend/daily", response_model=SpendSeriesOut)
+    def spend_daily(
+        user: User, svc: Service, days: Annotated[int, Query(ge=1, le=90)] = 30
+    ) -> SpendSeriesOut:
+        series = svc.daily_spend(days)
+        return SpendSeriesOut.model_validate(
+            {
+                **asdict(series),
+                "days": [{**asdict(d), "total": round(d.total, 6)} for d in series.days],
+            }
+        )
+
+    @app.get("/api/repos", response_model=ReposOut)
+    def repos(user: User, svc: Service) -> ReposOut:
+        return ReposOut.model_validate(asdict(svc.repos_page()))
+
+    @app.get("/api/settings", response_model=SettingsOut)
+    def settings(request: Request, user: User) -> SettingsOut:
+        st = _state(request)
+        return settings_view(st.cfg, st.clock())
 
     @app.get("/api/runs", response_model=RunList)
     def runs(

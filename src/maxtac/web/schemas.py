@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -131,6 +131,8 @@ class FixOut(_Out):
     diff: str = Field(default="", description="Diff unificato, testo semplice")
     test_output: str = ""
     triage_reason: str = ""
+    iterations: int | None = Field(default=None, description="Passi del loop dell'agente")
+    agent_stop: str | None = None
 
 
 class TriagedOut(_Out):
@@ -175,3 +177,150 @@ class TaskDetail(_Out):
     mr_url: str | None = None
     diff: str = ""
     test_output: str = ""
+    iterations: int | None = None
+    agent_stop: str | None = None
+
+
+# --- spesa giornaliera ---
+
+
+class DaySpendOut(_Out):
+    date: date
+    triage: float
+    fix: float
+    hunt: float
+    discovery: float
+    other: float
+    total: float
+
+
+class MonthPointOut(_Out):
+    date: date
+    cumulative_usd: float
+
+
+class SpendSeriesOut(_Out):
+    timezone: str
+    days: list[DaySpendOut]
+    month: list[MonthPointOut]
+    cap_usd: float
+    credits_usd: float
+
+
+# --- repository e proposte ---
+
+OriginName = Literal["config", "approved"]
+ProposalStatusName = Literal["pending", "superseded", "rejected"]
+
+
+class RepoOut(_Out):
+    project: str
+    origin: OriginName
+    languages: list[str]
+    setup_command: str | None
+    test_command: str
+    default_branch: str | None
+    approved_at: datetime | None
+    last_hunted: datetime | None
+    hunt_count: int
+    rotation: int
+    next_up: bool
+    findings_by_status: dict[str, int]
+    open_mrs: int
+
+
+class FieldChangeOut(_Out):
+    field: str
+    active: str | None
+    proposed: str | None
+
+
+class ProposalOut(_Out):
+    id: int | None
+    project: str
+    status: ProposalStatusName
+    languages: list[str]
+    setup_command: str | None = Field(description="Non fidato: proposto dal contenuto del repo")
+    test_command: str = Field(description="Non fidato: proposto dal contenuto del repo")
+    default_branch: str | None
+    rationale: str
+    baseline_ok: bool | None
+    baseline_output: str
+    duration_s: float
+    cost_usd: float
+    suspicious: list[str]
+    blockers: list[str]
+    created_at: datetime
+    approve_command: str | None
+    changes: list[FieldChangeOut]
+
+
+class ReposOut(_Out):
+    repos: list[RepoOut]
+    proposals: list[ProposalOut]
+
+
+# --- impostazioni (sola lettura, senza segreti né utenti) ---
+
+
+class ScheduleOut(_Out):
+    timezone: str
+    at: str
+    next_run_at: datetime
+
+
+class FeaturesOut(_Out):
+    cve: bool
+    sast: bool
+    hunting: bool
+
+
+class ModelsOut(_Out):
+    triage: str
+    fix: str
+    hunt: str
+    discovery: str
+
+
+class BudgetOut(_Out):
+    monthly_credits_usd: float
+    per_night_usd: float
+    per_task_usd: float
+    triage_per_repo_usd: float
+    hunting_per_night_usd: float
+    discovery_per_repo_usd: float
+
+
+class LimitsOut(_Out):
+    max_mrs_per_night: int
+    max_attempts: int
+    max_iterations: int
+
+
+class HuntingOut(_Out):
+    repos_per_night: int
+    lookback_days: int
+
+
+class VCSOut(_Out):
+    branch_prefix: str
+    mr_labels: list[str]
+
+
+class PriceOut(_Out):
+    model: str
+    input: float
+    output: float
+    cache_read: float
+    cache_write: float
+
+
+class SettingsOut(_Out):
+    schedule: ScheduleOut
+    features: FeaturesOut
+    models: ModelsOut
+    budget: BudgetOut
+    limits: LimitsOut
+    hunting: HuntingOut
+    vcs: VCSOut
+    prices: list[PriceOut]

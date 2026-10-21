@@ -130,6 +130,14 @@
   --kpi-top-2: #00f0ff;
   --kpi-top-3: #ecead8;
   --kpi-top-4: #ff2a6d;
+
+  /* grafici: ciano, magenta e giallo scurito per stare nella banda di luminosità
+     del fondo scuro (palette validata con la skill dataviz) */
+  --viz-fix: #1497b8;
+  --viz-hunt: #f0306e;
+  --viz-rest: #a19300;
+  --viz-grid: #23232e;
+  --viz-ref: #ababb8;
 }
 
 /* Le intestazioni di tabella restano in minuscolo come nel tema di default. */

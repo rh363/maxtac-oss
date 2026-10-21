@@ -2,7 +2,14 @@
 	import { resolve } from '$app/paths';
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { Clock, LayoutDashboard, LogOut, TriangleAlert } from '@lucide/svelte';
+	import {
+		Clock,
+		FolderGit2,
+		LayoutDashboard,
+		LogOut,
+		Settings2,
+		TriangleAlert
+	} from '@lucide/svelte';
 	import { api } from '$lib/api';
 	import { time } from '$lib/format';
 	import { t, tag } from '$lib/lexicon/index.svelte';
@@ -21,7 +28,9 @@
 	const nav = [
 		{ href: resolve('/'), key: 'nav.dashboard', icon: LayoutDashboard },
 		{ href: resolve('/findings'), key: 'nav.findings', icon: TriangleAlert },
-		{ href: resolve('/runs'), key: 'nav.runs', icon: Clock }
+		{ href: resolve('/runs'), key: 'nav.runs', icon: Clock },
+		{ href: resolve('/repos'), key: 'nav.repos', icon: FolderGit2 },
+		{ href: resolve('/settings'), key: 'nav.settings', icon: Settings2 }
 	] as const;
 
 	function active(href: string, path: string): boolean {
@@ -33,6 +42,8 @@
 		const out = [tag('brand')];
 		if (parts.length === 0) out.push(t('nav.dashboard'));
 		else if (parts[0] === 'findings') out.push(t('nav.findings'));
+		else if (parts[0] === 'repos') out.push(t('nav.repos'));
+		else if (parts[0] === 'settings') out.push(t('nav.settings'));
 		else if (parts[0] === 'runs') {
 			out.push(t('nav.runs'));
 			if (parts[1]) out.push(parts[1]);

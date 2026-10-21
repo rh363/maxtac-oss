@@ -75,3 +75,62 @@ def test_same_fingerprint_in_two_repos_is_two_findings(store):
     a, b = store.get("alex/a", F.fingerprint), store.get("alex/b", F.fingerprint)
     assert a.status is FindingStatus.IGNORED and a.attempts == 0
     assert b.status is FindingStatus.NEW and b.attempts == 1
+
+
+# --- letture per la dashboard ---
+
+
+def _findings(store):
+    from maxtac.domain.models import FindingQuery
+
+    rows = [
+        Finding("cve", "osv-scanner", "GHSA-abcd", "requests@2.19.0", Severity.HIGH, "d"),
+        Finding("sast", "semgrep", "python.lang.eval", "core/api.py", Severity.MEDIUM, "eval"),
+        Finding("sast", "bandit", "B602", "tools/run_100%.py", Severity.LOW, "shell"),
+        Finding("sast", "bandit", "B603", "tools/run_1x.py", Severity.LOW, "shell"),
+        Finding("sast", "gosec", "G101", "cmd/a_b.go", Severity.LOW, "cred"),
+        Finding("sast", "gosec", "G102", "cmd/axb.go", Severity.LOW, "bind"),
+    ]
+    store.observe(P, rows, T)
+    return lambda q, **kw: store.list_findings(FindingQuery(q=q, **kw))
+
+
+def test_finding_text_search_is_case_insensitive_on_rule_location_tool(store):
+    search = _findings(store)
+    assert [r.rule for r in search("ghsa")[0]] == ["GHSA-abcd"]
+    assert [r.location for r in search("CORE/")[0]] == ["core/api.py"]
+    rows, total = search("bandit")
+    assert total == 2 and {r.rule for r in rows} == {"B602", "B603"}
+    assert search("nessuno")[1] == 0
+
+
+def test_finding_text_search_escapes_like_wildcards(store):
+    search = _findings(store)
+    assert [r.location for r in search("100%")[0]] == ["tools/run_100%.py"]
+    assert [r.location for r in search("a_b")[0]] == ["cmd/a_b.go"]  # non trova cmd/axb.go
+    assert search("%")[1] == 1 and search("_")[1] >= 1
+
+
+def test_finding_text_search_combines_with_filters(store):
+    search = _findings(store)
+    rows, total = search("shell", kind="sast", severity=Severity.LOW)
+    assert total == 2 and all(r.tool == "bandit" for r in rows)
+
+
+def test_counts_by_project(store):
+    _findings(store)
+    other = Finding("cve", "osv-scanner", "GHSA-x", "lodash@4.0.0", Severity.HIGH, "d")
+    store.observe("alex/web", [other], T)
+    store.set_status("alex/web", other.fingerprint, FindingStatus.IGNORED, "no")
+    counts = store.counts_by_project()
+    assert counts[P] == {"new": 6}
+    assert counts["alex/web"] == {"ignored": 1}
+
+
+def test_budget_ledger_since(budget_port):
+    budget_port.record("r1", "fix:a:x", "m", 0.5, T)
+    budget_port.record("r1", "triage:a", "m", 0.1, T.replace(day=19))
+    budget_port.record("r0", "hunt:a", "m", 0.2, T.replace(day=1))
+    rows = budget_port.ledger(T.replace(day=19, hour=0))
+    assert [(r.scope, r.usd) for r in rows] == [("triage:a", 0.1), ("fix:a:x", 0.5)]
+    assert rows[0].at == T.replace(day=19)

@@ -3,7 +3,7 @@
 	import { api, type TaskDetail } from '$lib/api';
 	import { Async, Badge, PageHeader, SectionTitle } from '$lib/svelte/component';
 	import { t, tag } from '$lib/lexicon/index.svelte';
-	import { money, safeHttps } from '$lib/format';
+	import { money, safeHttps, stopKey } from '$lib/format';
 	import { outcomeTone, severityTone } from '$lib/tones';
 	import DiffView from './components/DiffView.svelte';
 
@@ -131,6 +131,17 @@
 			</section>
 			<section class="card flex flex-col gap-1 p-5">
 				<SectionTitle class="mb-2 text-base!">{t('sec.cost')}</SectionTitle>
+				{#if d.iterations !== null}
+					<div class="border-line flex justify-between gap-3 border-t py-2">
+						<span>{t('task.agent')}</span>
+						<span class="mono" data-testid="iterations"
+							>{t('task.iterations', {
+								n: d.iterations,
+								stop: t(stopKey(d.agent_stop))
+							})}</span
+						>
+					</div>
+				{/if}
 				<div class="border-line flex justify-between gap-3 border-t py-2">
 					<span class="flex flex-col gap-0.5">
 						<span>{t('cost.task')}</span>

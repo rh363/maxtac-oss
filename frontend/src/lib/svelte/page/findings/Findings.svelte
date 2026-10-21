@@ -2,11 +2,18 @@
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { ExternalLink } from '@lucide/svelte';
+	import { ExternalLink, Search, X } from '@lucide/svelte';
 	import { api, type FindingPage } from '$lib/api';
 	import { Async, Badge, PageHeader } from '$lib/svelte/component';
 	import { t } from '$lib/lexicon/index.svelte';
-	import { PAGE_SIZE, parseFilters, toApi, toSearch, type FindingView } from '$lib/filters';
+	import {
+		MAX_QUERY,
+		PAGE_SIZE,
+		parseFilters,
+		toApi,
+		toSearch,
+		type FindingView
+	} from '$lib/filters';
 	import { safeHttps } from '$lib/format';
 	import { severityTone, statusTone } from '$lib/tones';
 
@@ -24,6 +31,14 @@
 		void nonce;
 		return api.findings(toApi(view));
 	});
+
+	// testo in modifica; si applica con Invio o uscendo dal campo
+	let draft = $derived(view.q ?? '');
+
+	function search() {
+		const q = draft.trim();
+		if (q !== (view.q ?? '')) update({ q: q || undefined });
+	}
 
 	function update(patch: Partial<FindingView>) {
 		const next = { ...view, page: 1, ...patch };
@@ -85,8 +100,38 @@
 <form
 	aria-label={t('filters')}
 	class="card flex flex-wrap items-end gap-3 p-4"
-	onsubmit={(e) => e.preventDefault()}
+	role="search"
+	onsubmit={(e) => {
+		e.preventDefault();
+		search();
+	}}
 >
+	<label class="text-muted flex flex-[2_1_260px] flex-col gap-1.5 text-[13px]">
+		{t('find.search')}
+		<span class="field search flex items-center gap-2 px-2.5">
+			<Search size={16} strokeWidth={1.5} aria-hidden="true" />
+			<input
+				type="search"
+				name="q"
+				class="text-ink min-w-0 flex-1 bg-transparent text-sm outline-none"
+				placeholder={t('find.searchHint')}
+				maxlength={MAX_QUERY}
+				bind:value={draft}
+				onblur={search}
+			/>
+			{#if view.q}
+				<button
+					type="button"
+					class="text-muted hover:text-ink flex size-8 items-center justify-center"
+					aria-label={t('find.searchClear')}
+					onclick={() => {
+						draft = '';
+						update({ q: undefined });
+					}}><X size={16} strokeWidth={1.5} aria-hidden="true" /></button
+				>
+			{/if}
+		</span>
+	</label>
 	{#each filters as f (f.key)}
 		<label class="text-muted flex flex-[1_1_150px] flex-col gap-1.5 text-[13px]">
 			{f.label}
@@ -194,3 +239,13 @@
 		{/if}
 	{/snippet}
 </Async>
+
+<style>
+	.search:focus-within {
+		outline: 2px solid var(--link);
+		outline-offset: 2px;
+	}
+	.search input:focus-visible {
+		outline: none;
+	}
+</style>

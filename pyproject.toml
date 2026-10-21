@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 maxtac = "maxtac.cli:main"
+autofix = "maxtac.cli:main"  # stesso comando, nome neutro (è quello mostrato dalla dashboard)
 
 [project.optional-dependencies]
 web = [

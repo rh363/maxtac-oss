@@ -1,6 +1,44 @@
 {
   "components": {
     "schemas": {
+      "BudgetOut": {
+        "properties": {
+          "discovery_per_repo_usd": {
+            "title": "Discovery Per Repo Usd",
+            "type": "number"
+          },
+          "hunting_per_night_usd": {
+            "title": "Hunting Per Night Usd",
+            "type": "number"
+          },
+          "monthly_credits_usd": {
+            "title": "Monthly Credits Usd",
+            "type": "number"
+          },
+          "per_night_usd": {
+            "title": "Per Night Usd",
+            "type": "number"
+          },
+          "per_task_usd": {
+            "title": "Per Task Usd",
+            "type": "number"
+          },
+          "triage_per_repo_usd": {
+            "title": "Triage Per Repo Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "monthly_credits_usd",
+          "per_night_usd",
+          "per_task_usd",
+          "triage_per_repo_usd",
+          "hunting_per_night_usd",
+          "discovery_per_repo_usd"
+        ],
+        "title": "BudgetOut",
+        "type": "object"
+      },
       "DashboardOut": {
         "properties": {
           "findings_by_status": {
@@ -83,6 +121,110 @@
           "next_run_at"
         ],
         "title": "DashboardOut",
+        "type": "object"
+      },
+      "DaySpendOut": {
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "discovery": {
+            "title": "Discovery",
+            "type": "number"
+          },
+          "fix": {
+            "title": "Fix",
+            "type": "number"
+          },
+          "hunt": {
+            "title": "Hunt",
+            "type": "number"
+          },
+          "other": {
+            "title": "Other",
+            "type": "number"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          },
+          "triage": {
+            "title": "Triage",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "triage",
+          "fix",
+          "hunt",
+          "discovery",
+          "other",
+          "total"
+        ],
+        "title": "DaySpendOut",
+        "type": "object"
+      },
+      "FeaturesOut": {
+        "properties": {
+          "cve": {
+            "title": "Cve",
+            "type": "boolean"
+          },
+          "hunting": {
+            "title": "Hunting",
+            "type": "boolean"
+          },
+          "sast": {
+            "title": "Sast",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cve",
+          "sast",
+          "hunting"
+        ],
+        "title": "FeaturesOut",
+        "type": "object"
+      },
+      "FieldChangeOut": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "proposed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed"
+          }
+        },
+        "required": [
+          "field",
+          "active",
+          "proposed"
+        ],
+        "title": "FieldChangeOut",
         "type": "object"
       },
       "FindingOut": {
@@ -213,6 +355,17 @@
       },
       "FixOut": {
         "properties": {
+          "agent_stop": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Stop"
+          },
           "branch": {
             "anyOf": [
               {
@@ -238,6 +391,18 @@
             "description": "Diff unificato, testo semplice",
             "title": "Diff",
             "type": "string"
+          },
+          "iterations": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Passi del loop dell'agente",
+            "title": "Iterations"
           },
           "mr_url": {
             "anyOf": [
@@ -290,6 +455,24 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HuntingOut": {
+        "properties": {
+          "lookback_days": {
+            "title": "Lookback Days",
+            "type": "integer"
+          },
+          "repos_per_night": {
+            "title": "Repos Per Night",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "repos_per_night",
+          "lookback_days"
+        ],
+        "title": "HuntingOut",
+        "type": "object"
+      },
       "HuntingSlotOut": {
         "properties": {
           "hunt_count": {
@@ -326,6 +509,29 @@
         "title": "HuntingSlotOut",
         "type": "object"
       },
+      "LimitsOut": {
+        "properties": {
+          "max_attempts": {
+            "title": "Max Attempts",
+            "type": "integer"
+          },
+          "max_iterations": {
+            "title": "Max Iterations",
+            "type": "integer"
+          },
+          "max_mrs_per_night": {
+            "title": "Max Mrs Per Night",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_mrs_per_night",
+          "max_attempts",
+          "max_iterations"
+        ],
+        "title": "LimitsOut",
+        "type": "object"
+      },
       "Me": {
         "properties": {
           "theme": {
@@ -342,6 +548,53 @@
           "theme"
         ],
         "title": "Me",
+        "type": "object"
+      },
+      "ModelsOut": {
+        "properties": {
+          "discovery": {
+            "title": "Discovery",
+            "type": "string"
+          },
+          "fix": {
+            "title": "Fix",
+            "type": "string"
+          },
+          "hunt": {
+            "title": "Hunt",
+            "type": "string"
+          },
+          "triage": {
+            "title": "Triage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "triage",
+          "fix",
+          "hunt",
+          "discovery"
+        ],
+        "title": "ModelsOut",
+        "type": "object"
+      },
+      "MonthPointOut": {
+        "properties": {
+          "cumulative_usd": {
+            "title": "Cumulative Usd",
+            "type": "number"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "cumulative_usd"
+        ],
+        "title": "MonthPointOut",
         "type": "object"
       },
       "MonthSpendOut": {
@@ -435,6 +688,300 @@
         "title": "OpenMR",
         "type": "object"
       },
+      "PriceOut": {
+        "properties": {
+          "cache_read": {
+            "title": "Cache Read",
+            "type": "number"
+          },
+          "cache_write": {
+            "title": "Cache Write",
+            "type": "number"
+          },
+          "input": {
+            "title": "Input",
+            "type": "number"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "output": {
+            "title": "Output",
+            "type": "number"
+          }
+        },
+        "required": [
+          "model",
+          "input",
+          "output",
+          "cache_read",
+          "cache_write"
+        ],
+        "title": "PriceOut",
+        "type": "object"
+      },
+      "ProposalOut": {
+        "properties": {
+          "approve_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approve Command"
+          },
+          "baseline_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Ok"
+          },
+          "baseline_output": {
+            "title": "Baseline Output",
+            "type": "string"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/FieldChangeOut"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "default_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Branch"
+          },
+          "duration_s": {
+            "title": "Duration S",
+            "type": "number"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Languages",
+            "type": "array"
+          },
+          "project": {
+            "title": "Project",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "setup_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Non fidato: proposto dal contenuto del repo",
+            "title": "Setup Command"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "superseded",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "suspicious": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suspicious",
+            "type": "array"
+          },
+          "test_command": {
+            "description": "Non fidato: proposto dal contenuto del repo",
+            "title": "Test Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project",
+          "status",
+          "languages",
+          "setup_command",
+          "test_command",
+          "default_branch",
+          "rationale",
+          "baseline_ok",
+          "baseline_output",
+          "duration_s",
+          "cost_usd",
+          "suspicious",
+          "blockers",
+          "created_at",
+          "approve_command",
+          "changes"
+        ],
+        "title": "ProposalOut",
+        "type": "object"
+      },
+      "RepoOut": {
+        "properties": {
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "default_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Branch"
+          },
+          "findings_by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Findings By Status",
+            "type": "object"
+          },
+          "hunt_count": {
+            "title": "Hunt Count",
+            "type": "integer"
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Languages",
+            "type": "array"
+          },
+          "last_hunted": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Hunted"
+          },
+          "next_up": {
+            "title": "Next Up",
+            "type": "boolean"
+          },
+          "open_mrs": {
+            "title": "Open Mrs",
+            "type": "integer"
+          },
+          "origin": {
+            "enum": [
+              "config",
+              "approved"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "project": {
+            "title": "Project",
+            "type": "string"
+          },
+          "rotation": {
+            "title": "Rotation",
+            "type": "integer"
+          },
+          "setup_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setup Command"
+          },
+          "test_command": {
+            "title": "Test Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project",
+          "origin",
+          "languages",
+          "setup_command",
+          "test_command",
+          "default_branch",
+          "approved_at",
+          "last_hunted",
+          "hunt_count",
+          "rotation",
+          "next_up",
+          "findings_by_status",
+          "open_mrs"
+        ],
+        "title": "RepoOut",
+        "type": "object"
+      },
       "RepoRunOut": {
         "properties": {
           "bugs_found": {
@@ -503,6 +1050,30 @@
           "errors"
         ],
         "title": "RepoRunOut",
+        "type": "object"
+      },
+      "ReposOut": {
+        "properties": {
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalOut"
+            },
+            "title": "Proposals",
+            "type": "array"
+          },
+          "repos": {
+            "items": {
+              "$ref": "#/components/schemas/RepoOut"
+            },
+            "title": "Repos",
+            "type": "array"
+          }
+        },
+        "required": [
+          "repos",
+          "proposals"
+        ],
+        "title": "ReposOut",
         "type": "object"
       },
       "RunDetail": {
@@ -673,8 +1244,126 @@
         "title": "RunSummaryOut",
         "type": "object"
       },
+      "ScheduleOut": {
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "next_run_at": {
+            "format": "date-time",
+            "title": "Next Run At",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timezone",
+          "at",
+          "next_run_at"
+        ],
+        "title": "ScheduleOut",
+        "type": "object"
+      },
+      "SettingsOut": {
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/BudgetOut"
+          },
+          "features": {
+            "$ref": "#/components/schemas/FeaturesOut"
+          },
+          "hunting": {
+            "$ref": "#/components/schemas/HuntingOut"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/LimitsOut"
+          },
+          "models": {
+            "$ref": "#/components/schemas/ModelsOut"
+          },
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/PriceOut"
+            },
+            "title": "Prices",
+            "type": "array"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/ScheduleOut"
+          },
+          "vcs": {
+            "$ref": "#/components/schemas/VCSOut"
+          }
+        },
+        "required": [
+          "schedule",
+          "features",
+          "models",
+          "budget",
+          "limits",
+          "hunting",
+          "vcs",
+          "prices"
+        ],
+        "title": "SettingsOut",
+        "type": "object"
+      },
+      "SpendSeriesOut": {
+        "properties": {
+          "cap_usd": {
+            "title": "Cap Usd",
+            "type": "number"
+          },
+          "credits_usd": {
+            "title": "Credits Usd",
+            "type": "number"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/DaySpendOut"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "month": {
+            "items": {
+              "$ref": "#/components/schemas/MonthPointOut"
+            },
+            "title": "Month",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timezone",
+          "days",
+          "month",
+          "cap_usd",
+          "credits_usd"
+        ],
+        "title": "SpendSeriesOut",
+        "type": "object"
+      },
       "TaskDetail": {
         "properties": {
+          "agent_stop": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Stop"
+          },
           "branch": {
             "anyOf": [
               {
@@ -700,6 +1389,17 @@
             "default": "",
             "title": "Diff",
             "type": "string"
+          },
+          "iterations": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iterations"
           },
           "mr_url": {
             "anyOf": [
@@ -847,6 +1547,27 @@
           "reason"
         ],
         "title": "TriagedOut",
+        "type": "object"
+      },
+      "VCSOut": {
+        "properties": {
+          "branch_prefix": {
+            "title": "Branch Prefix",
+            "type": "string"
+          },
+          "mr_labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mr Labels",
+            "type": "array"
+          }
+        },
+        "required": [
+          "branch_prefix",
+          "mr_labels"
+        ],
+        "title": "VCSOut",
         "type": "object"
       },
       "ValidationError": {
@@ -1003,6 +1724,23 @@
           },
           {
             "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -1066,6 +1804,24 @@
           }
         },
         "summary": "Me"
+      }
+    },
+    "/api/repos": {
+      "get": {
+        "operationId": "repos_api_repos_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReposOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Repos"
       }
     },
     "/api/runs": {
@@ -1222,6 +1978,66 @@
           }
         },
         "summary": "Task"
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "operationId": "settings_api_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Settings"
+      }
+    },
+    "/api/spend/daily": {
+      "get": {
+        "operationId": "spend_daily_api_spend_daily_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendSeriesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spend Daily"
       }
     },
     "/api/theme/{theme}/lexicon.json": {

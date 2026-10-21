@@ -25,6 +25,7 @@ from .models import (
     RepoProposal,
     RunReport,
     RunSummary,
+    SpendEntry,
     StructuredResult,
     ToolSpec,
     Usage,
@@ -190,6 +191,8 @@ class FindingStore(Protocol):
 
     def counts_by_status(self) -> dict[str, int]: ...
 
+    def counts_by_project(self) -> dict[str, dict[str, int]]: ...
+
     def open_mrs(self) -> list[dict[str, Any]]: ...
 
     def list_findings(self, q: FindingQuery) -> tuple[list[FindingRow], int]:
@@ -203,6 +206,10 @@ class BudgetPort(Protocol):
     def spent(self, run_id: str, scope: str | None = None) -> float: ...
 
     def spent_month(self, year: int, month: int) -> float: ...
+
+    def ledger(self, since: datetime) -> list[SpendEntry]:
+        """Le singole spese da `since` in poi, in ordine di tempo."""
+        ...
 
 
 class RunStore(Protocol):

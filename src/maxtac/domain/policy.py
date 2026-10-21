@@ -18,6 +18,7 @@ from .models import (
     FindingRecord,
     FindingStatus,
     RepoConfig,
+    RepoProposal,
     Severity,
     Task,
 )
@@ -350,3 +351,23 @@ def merge_repos(manual: Sequence[RepoConfig], approved: Iterable[RepoConfig]) ->
     """
     known = {r.project for r in manual}
     return [*manual, *(r for r in approved if r.project not in known)]
+
+
+SPEND_CATEGORIES = ("triage", "fix", "hunt", "discovery")
+
+
+def spend_category(scope: str) -> str:
+    """Categoria di una spesa dal suo scope (`fix:<repo>:<task>`, `triage:<repo>`...)."""
+    head = scope.split(":", 1)[0]
+    return head if head in SPEND_CATEGORIES else "other"
+
+
+def approval_blockers(p: RepoProposal) -> list[str]:
+    """Motivi per cui una proposta dell'autodiscovery si approva solo con `--force`."""
+    problems = []
+    if p.baseline_ok is not True:
+        problems.append("baseline non verde")
+    problems += list(p.suspicious)
+    if not p.languages:
+        problems.append("nessun linguaggio")
+    return problems

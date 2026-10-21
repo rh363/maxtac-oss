@@ -22,7 +22,7 @@ from maxtac.config import RepoConf
 from maxtac.container import Container
 from maxtac.domain.budget import BudgetExceeded
 from maxtac.domain.models import ProposalStatus, RepoConfig, RepoProposal
-from maxtac.domain.policy import command_suspicions
+from maxtac.domain.policy import approval_blockers, command_suspicions
 from maxtac.domain.ports import LLMUnavailable
 from maxtac.services.discovery import proposal_diff
 
@@ -215,12 +215,7 @@ def cmd_approve(c: Container, args: argparse.Namespace, editor: Editor = _system
         if (edited.setup_command, edited.test_command) != (p.setup_command, p.test_command):
             print("nota: la baseline si riferisce ai comandi originali, non a quelli corretti")
         p = edited
-    problems = []
-    if p.baseline_ok is not True:
-        problems.append("baseline non verde")
-    problems += list(p.suspicious)
-    if not p.languages:
-        problems.append("nessun linguaggio")
+    problems = approval_blockers(p)
     if problems and not args.force:
         print(f"{p.project}: non approvo senza --force:", file=sys.stderr)
         for line in problems:

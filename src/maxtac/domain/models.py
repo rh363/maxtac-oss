@@ -152,6 +152,7 @@ class FindingQuery:
     kind: str | None = None
     severity: Severity | None = None
     status: FindingStatus | None = None
+    q: str | None = None  # testo libero su regola, posizione, dettaglio e tool
     limit: int = 50
     offset: int = 0
 
@@ -331,6 +332,8 @@ class FixResult:
     diff: str = ""
     test_output: str = ""  # output dei test della verifica indipendente
     triage_reason: str = ""
+    iterations: int | None = None  # passi del loop dell'agente; None se l'agente non è partito
+    agent_stop: str | None = None  # perché si è fermato: end_turn, max_iterations, budget...
 
 
 @dataclass
@@ -374,3 +377,12 @@ class RunSummary:
     spent_usd: float
     mrs_opened: int
     aborted: str | None
+
+
+@dataclass(frozen=True)
+class SpendEntry:
+    """Una riga del registro della spesa: una chiamata al modello."""
+
+    at: datetime
+    scope: str  # categoria:repo[:task], es. fix:alex__ecs2:3f2a...
+    usd: float

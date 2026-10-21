@@ -3,6 +3,9 @@ import {
 	DashboardOut,
 	FindingPage,
 	Me,
+	ReposOut,
+	SettingsOut,
+	SpendSeriesOut,
 	RunDetail,
 	RunList,
 	TaskDetail,
@@ -26,6 +29,7 @@ export interface FindingFilters {
 	severity?: Severity;
 	status?: Status;
 	repo?: string;
+	q?: string;
 	limit?: number;
 	offset?: number;
 }
@@ -61,6 +65,18 @@ export class ApiClient {
 			if (v !== undefined && v !== '') params[k] = String(v);
 		}
 		return this.get('/api/findings', FindingPage, params);
+	}
+
+	spendDaily(days = 30) {
+		return this.get('/api/spend/daily', SpendSeriesOut, { days: String(days) });
+	}
+
+	repos() {
+		return this.get('/api/repos', ReposOut);
+	}
+
+	settings() {
+		return this.get('/api/settings', SettingsOut);
 	}
 
 	runs(limit = 20, offset = 0) {

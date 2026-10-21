@@ -36,6 +36,8 @@ ci si ferma e si riassume.
 - Dashboard (`src/maxtac/web/`): sola lettura, db aperto con `connect_readonly`, nessun
   segreto del bot. Un utente senza tema assegnato non deve poter scoprire il tema alternativo:
   `theme: "default"`, asset 404 come per un tema inesistente, bundle base solo neutro.
+- Testo mostrato dalla dashboard a tutti gli utenti: mai `maxtac` (è un termine del tema),
+  per il comando si usa l'alias `autofix`.
 - Dopo una modifica all'API: `uv run maxtac web --export-openapi web/openapi.json`, poi
   allinea `frontend/src/lib/api/schemas.ts` (il test di contratto in vitest lo verifica).
 - Frontend (`frontend/`): etichette solo da `src/lib/lexicon/neutral.json` via `t()`, mai
@@ -52,6 +54,7 @@ uv run ruff check src tests && uv run ruff format --check src tests
 uv run mypy src
 AUTOFIX_DOCKER_TESTS=1 uv run pytest -m docker   # solo con un daemon Docker
 cd frontend && npm run build && npm run check && npm run lint && npm test && npm run test:e2e
+SCREENSHOTS=1 npx playwright test --project 'shots-*'   # rigenera docs/screenshots/
 ```
 
 Test prima (pytest, adapter finti in `tests/fakes.py`), poi implementazione, poi README e

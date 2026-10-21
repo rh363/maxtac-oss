@@ -471,3 +471,38 @@ def test_unpriced_fallback_model_is_charged_at_highest_price(world):
     assert fx.outcome is Outcome.MR_OPENED
     # 100k token al prezzo più alto noto (Opus: 4$/MTok) = 0,40$
     assert fx.cost_usd >= 0.40
+
+
+# --- iterazioni dell'agente nel report (dashboard) ---
+
+
+def test_fix_result_records_agent_iterations_and_stop(world):
+    from maxtac.domain.serialize import report_to_dict
+
+    w = world(turns=bump_turns())
+    report = w.run()
+    [fx] = report.repos[0].fixes
+    assert fx.iterations == 2 and fx.agent_stop == "end_turn"
+    [saved] = report_to_dict(report)["repos"][0]["fixes"]
+    assert saved["iterations"] == 2 and saved["agent_stop"] == "end_turn"
+
+
+def test_failed_agent_still_records_iterations(world):
+    w = world(turns=[end_turn("niente da fare")])
+    [fx] = w.run().repos[0].fixes
+    assert fx.outcome is Outcome.AGENT_FAILED
+    assert fx.iterations == 1 and fx.agent_stop == "end_turn"
+
+
+def test_max_iterations_stop_is_recorded(world):
+    turns = [tool_turn(call("run", cmd="ls")) for _ in range(3)]
+    w = world(turns=turns, limits=Limits(max_iterations=3))
+    [fx] = w.run().repos[0].fixes
+    assert fx.outcome is Outcome.AGENT_FAILED
+    assert fx.iterations == 3 and fx.agent_stop == "max_iterations"
+
+
+def test_task_without_agent_has_no_iterations(world):
+    w = world(turns=bump_turns(), limits=Limits(per_night_usd=0.000001))
+    for fx in w.run().repos[0].fixes:
+        assert fx.iterations is None and fx.agent_stop is None

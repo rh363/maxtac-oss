@@ -88,6 +88,13 @@
 	--kpi-top-2: var(--border);
 	--kpi-top-3: var(--border);
 	--kpi-top-4: var(--border);
+
+	/* grafici: serie categoriali (validate con la skill dataviz), griglia e riferimenti */
+	--viz-fix: #2a78d6;
+	--viz-hunt: #eb6834;
+	--viz-rest: #1baf7a;
+	--viz-grid: #ededed;
+	--viz-ref: #525252;
 }
 
 @theme inline {

@@ -16,15 +16,23 @@
 			task: f.task,
 			outcome: f.outcome,
 			detail: f.detail,
-			cost: f.cost_usd as number | null
+			cost: f.cost_usd as number | null,
+			iterations: f.iterations
 		})),
 		...repo.needs_human.map((x) => ({
 			task: x.task,
 			outcome: 'needs_human',
 			detail: x.reason,
-			cost: null
+			cost: null,
+			iterations: null
 		})),
-		...repo.ignored.map((x) => ({ task: x.task, outcome: 'ignored', detail: x.reason, cost: null }))
+		...repo.ignored.map((x) => ({
+			task: x.task,
+			outcome: 'ignored',
+			detail: x.reason,
+			cost: null,
+			iterations: null
+		}))
 	]);
 	const href = (fp: string) =>
 		resolve(`/runs/[id]/tasks/[fp]?repo=${encodeURIComponent(repo.project)}`, { id: runId, fp });
@@ -64,6 +72,15 @@
 	{:else}
 		<div class="overflow-x-auto">
 			<table class="w-full min-w-[640px] border-collapse">
+				<thead class="sr-only">
+					<tr>
+						<th>{t('col.kind')}</th>
+						<th>{t('sec.finding')}</th>
+						<th>{t('col.note')}</th>
+						<th>{t('col.iterations')}</th>
+						<th>{t('col.cost')}</th>
+					</tr>
+				</thead>
 				<tbody>
 					{#each rows as row, i (`${row.task.fingerprint}-${i}`)}
 						<tr class="border-line border-t first:border-t-0">
@@ -77,6 +94,12 @@
 							<td class="px-3 py-2.5">
 								<Badge tone={outcomeTone(row.outcome)}>{t(`outcome.${row.outcome}` as never)}</Badge
 								>
+							</td>
+							<td
+								class="mono text-muted px-3 py-2.5 text-right text-xs whitespace-nowrap"
+								data-testid="iterations"
+							>
+								{row.iterations === null ? '' : t('run.steps', { n: row.iterations })}
 							</td>
 							<td
 								class="mono px-5 py-2.5 text-right whitespace-nowrap"

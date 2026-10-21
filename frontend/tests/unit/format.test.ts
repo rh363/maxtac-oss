@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ago, duration, money, parseDiff, percent, runDate, safeHttps } from '$lib/format';
+import { ago, duration, money, parseDiff, percent, runDate, safeHttps, stopKey } from '$lib/format';
 
 describe('money', () => {
 	it('usa la virgola e due decimali', () => {
@@ -76,5 +76,14 @@ describe('parseDiff', () => {
 		expect(parseDiff('+<img src=x onerror=alert(1)>').lines[0]?.text).toBe(
 			'+<img src=x onerror=alert(1)>'
 		);
+	});
+});
+
+describe('motivo di arresto dell agente', () => {
+	it('chiavi note e ripiego', () => {
+		expect(stopKey('max_iterations')).toBe('stop.max_iterations');
+		expect(stopKey('budget')).toBe('stop.budget');
+		expect(stopKey(null)).toBe('stop.other');
+		expect(stopKey('weird')).toBe('stop.other');
 	});
 });

@@ -24,6 +24,7 @@ from maxtac.domain.models import (
     RunReport,
     RunSummary,
     Severity,
+    SpendEntry,
 )
 from maxtac.domain.serialize import report_to_dict
 
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS findings (
     branch TEXT,
     first_seen TEXT NOT NULL,
     last_seen TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (project, fingerprint)
 );
 CREATE TABLE IF NOT EXISTS hunting (
@@ -59,6 +61,7 @@ CREATE TABLE IF NOT EXISTS spend (
     at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS spend_run ON spend(run_id);
+CREATE INDEX IF NOT EXISTS spend_at ON spend(at);
 CREATE TABLE IF NOT EXISTS runs (
     run_id TEXT PRIMARY KEY,
     started_at TEXT,
@@ -120,7 +123,24 @@ def connect(path: str | Path) -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA journal_mode=DELETE")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+DETAIL_LIMIT = 2000
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Colonne aggiunte dopo la prima versione dello schema."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(findings)")}
+    if "detail" not in cols:  # fase 6b: ricerca testuale nella dashboard
+        conn.execute("ALTER TABLE findings ADD COLUMN detail TEXT NOT NULL DEFAULT ''")
+
+
+def _like(text: str) -> str:
+    """Pattern LIKE per una ricerca per sottostringa: % e _ dell'utente restano letterali."""
+    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 def connect_readonly(path: str | Path) -> sqlite3.Connection:
@@ -157,10 +177,11 @@ class SqliteStore:
         self._db.executemany(
             """INSERT INTO findings
                    (project, fingerprint, kind, tool, rule, location, severity, first_seen,
-                    last_seen)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    last_seen, detail)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(project, fingerprint) DO UPDATE SET
-                   last_seen = excluded.last_seen, severity = excluded.severity""",
+                   last_seen = excluded.last_seen, severity = excluded.severity,
+                   detail = excluded.detail""",
             [
                 (
                     project,
@@ -172,6 +193,7 @@ class SqliteStore:
                     f.severity.name,
                     now,
                     now,
+                    f.detail[:DETAIL_LIMIT],
                 )
                 for f in findings
             ],
@@ -222,6 +244,15 @@ class SqliteStore:
         ).fetchone()
         return int(row["hunt_count"]) if row else 0
 
+    def counts_by_project(self) -> dict[str, dict[str, int]]:
+        rows = self._db.execute(
+            "SELECT project, status, COUNT(*) AS n FROM findings GROUP BY project, status"
+        )
+        out: dict[str, dict[str, int]] = {}
+        for r in rows:
+            out.setdefault(r["project"], {})[r["status"]] = r["n"]
+        return out
+
     def counts_by_status(self) -> dict[str, int]:
         rows = self._db.execute("SELECT status, COUNT(*) AS n FROM findings GROUP BY status")
         return {r["status"]: r["n"] for r in rows}
@@ -245,6 +276,17 @@ class SqliteStore:
             if val is not None:
                 where.append(f"{col} = ?")
                 params.append(val)
+        if q.q:
+            # LIKE di SQLite ignora già le maiuscole per l'ASCII; lower() copre il resto
+            where.append(
+                "("
+                + " OR ".join(
+                    f"lower({c}) LIKE lower(?) ESCAPE '\\'"
+                    for c in ("rule", "location", "detail", "tool")
+                )
+                + ")"
+            )
+            params += [_like(q.q)] * 4
         clause = f"WHERE {' AND '.join(where)}" if where else ""
         total = self._db.execute(f"SELECT COUNT(*) AS n FROM findings {clause}", params).fetchone()
         rank = " ".join(f"WHEN '{s.name}' THEN {int(s)}" for s in Severity)
@@ -295,6 +337,12 @@ class SqliteBudget:
                 (run_id, scope),
             ).fetchone()
         return float(row["s"])
+
+    def ledger(self, since: datetime) -> list[SpendEntry]:
+        rows = self._db.execute(
+            "SELECT at, scope, usd FROM spend WHERE at >= ? ORDER BY at, id", (_iso(since),)
+        )
+        return [SpendEntry(datetime.fromisoformat(r["at"]), r["scope"], r["usd"]) for r in rows]
 
     def spent_month(self, year: int, month: int) -> float:
         prefix = f"{year:04d}-{month:02d}-"

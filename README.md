@@ -258,8 +258,11 @@ dettaglio. `npm run build` fallisce se nel bundle compare uno dei termini di
 | --- | --- |
 | `GET /api/me` | utente e tema risolto |
 | `GET /api/dashboard` | spesa del mese vs crediti e proiezione, ultima notte vs tetto, MR aperte, finding per stato, rotazione del bug hunting, ultime run |
-| `GET /api/findings` | filtri `kind`, `severity`, `status`, `repo`; `limit` (max 200) e `offset` |
-| `GET /api/runs`, `GET /api/runs/{id}` | storico e report completo di una notte |
+| `GET /api/findings` | filtri `kind`, `severity`, `status`, `repo`; ricerca `q` (max 200 caratteri, senza distinzione di maiuscole, su regola, posizione, dettaglio e tool; `%` e `_` sono letterali); `limit` (max 200) e `offset` |
+| `GET /api/spend/daily?days=30` | spesa per giorno (1-90 giorni, fuso di `schedule.timezone`) divisa in triage, fix, hunt, discovery e altro; cumulato del mese; tetto per notte e crediti |
+| `GET /api/repos` | repo attivi (da `config.yaml` o approvati dall'autodiscovery), comandi, posizione nella rotazione del bug hunting, finding per stato, MR aperte; proposte dell'autodiscovery (in attesa, sostituite, rifiutate) con baseline, sospetti, differenze dalla config attiva e comando per approvarle |
+| `GET /api/settings` | configurazione effettiva in sola lettura: pianificazione, funzioni, modelli, budget, limiti, bug hunting, branch e label, prezzi. Niente segreti, path dell'host, URL di GitLab, utenti o temi |
+| `GET /api/runs`, `GET /api/runs/{id}` | storico e report completo di una notte (con i passi dell'agente per ogni task: `iterations` e `agent_stop`, `null` nei report precedenti) |
 | `GET /api/runs/{id}/tasks/{fingerprint}` | finding, motivo del triage, diff, output dei test, costo, link alla MR (`?repo=` se serve) |
 | `GET /api/theme/{name}/lexicon.json`, `.../theme.css` | pacchetto del tema, solo per chi ce l'ha assegnato |
 | `/auth/login`, `/auth/callback`, `POST /auth/logout` | login OIDC |
@@ -311,6 +314,12 @@ risposte; diff e output dei test sono testo semplice, da mostrare escaped.
 
 Per sviluppare: `web.dev_user` in config e `maxtac web --dev` (solo su loopback, nessun login).
 
+**Approvare dalla dashboard? No.** La pagina Repository mostra le proposte dell'autodiscovery e
+il comando da lanciare sull'orchestrator (`autofix repos approve <progetto>`, con `--force`
+quando la baseline non è verde o ci sono sospetti), ma non scrive nulla: la config di fiducia
+nasce solo da riga di comando. `autofix` è un alias neutro di `maxtac` installato dallo stesso
+pacchetto, ed è quello che la dashboard mostra a tutti gli utenti.
+
 ### GitLab self-hosted su rete interna
 
 Orchestrator e dashboard parlano con GitLab dalla rete della VM; i sandbox **no**: la loro
@@ -331,11 +340,18 @@ in `src/lib/svelte/page/<feature>/`, le rotte in `src/routes/` sono solo entry p
 
 | Schermata | Rotta |
 | --- | --- |
-| Dashboard: spesa del mese e della notte, MR, finding per stato, rotazione del bug hunting, ultime run | `/` |
-| Finding con filtri tipo, severità, stato e repo nell'URL, paginazione | `/findings` |
+| Dashboard: spesa del mese e della notte, grafico della spesa giornaliera (colonne impilate per categoria, tetto per notte, cumulato del mese contro i crediti, tabella dei dati), MR, finding per stato, rotazione del bug hunting, ultime run | `/` |
+| Finding con ricerca testuale e filtri tipo, severità, stato e repo nell'URL, paginazione | `/findings` |
 | Storico delle run | `/runs` |
 | Dettaglio run: statistiche, timeline per repo (scan, triage, fix, verifica, MR), task con esito e costo | `/runs/{id}` |
-| Dettaglio task: finding, motivo del triage, cosa cambia, verifica, diff, output dei test, costo, link alla MR | `/runs/{id}/tasks/{fp}?repo=` |
+| Dettaglio task: finding, motivo del triage, cosa cambia, verifica, diff, output dei test, passi dell'agente, costo, link alla MR | `/runs/{id}/tasks/{fp}?repo=` |
+| Repository attivi e proposte dell'autodiscovery (sola lettura, con il comando da copiare) | `/repos` |
+| Impostazioni effettive (sola lettura) | `/settings` |
+
+Il grafico della spesa è SVG scritto a mano, senza librerie: colori dalle variabili `--viz-*`
+del tema (palette categoriale validata per il daltonismo e per la luminosità sul fondo), passaggio
+del mouse e frecce della tastiera per il dettaglio di un giorno, tabella dei dati in un
+`<details>`. Il tema alternativo lo ricolora ridefinendo le stesse variabili.
 
 Etichette e temi: le etichette neutre stanno in `src/lib/lexicon/neutral.json`; dopo
 `/api/me`, se l'utente ha un tema, la SPA carica `/api/theme/<nome>/theme.css` e
@@ -359,11 +375,17 @@ npm run check      # svelte-check
 npm run lint       # prettier + eslint
 npm test           # vitest: client API e contratto, lessico, filtri, formattazione
 npm run test:e2e   # Playwright su due istanze demo (utente con tema e senza), richiede la build
-SCREENSHOTS=1 npm run test:e2e -- screenshots   # rigenera docs/screenshots/
+SCREENSHOTS=1 npm run test:e2e -- --project 'shots-*'   # rigenera docs/screenshots/
 ```
 
-Screenshot dei due temi in [`docs/screenshots/`](docs/screenshots/) (per esempio
-`neutral-dashboard-desktop.png` e `operator-dashboard-desktop.png`).
+I progetti Playwright `operator` e `neutral` eseguono ciascuno i test comuni
+(`common.spec.ts`) più quelli del proprio utente (`operator.spec.ts`, `neutral.spec.ts`):
+nessun test viene saltato. Gli screenshot (`screenshots.shot.ts`) sono progetti a parte,
+definiti solo con `SCREENSHOTS=1`.
+
+Screenshot dei due temi in [`docs/screenshots/`](docs/screenshots/): dashboard, finding, run,
+task, repository e impostazioni, desktop e mobile (per esempio `neutral-dashboard-desktop.png`
+e `operator-repos-mobile.png`).
 
 **Serving e CSP.** FastAPI serve la build (`web.static_dir`, default `frontend/build` accanto
 al sorgente): asset in `_app/immutable/` con cache immutabile, `index.html` senza cache e come
