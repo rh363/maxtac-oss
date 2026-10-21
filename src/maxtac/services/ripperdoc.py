@@ -1,4 +1,8 @@
-"""Fix agent (Ripperdoc): loop agentico sulla Messages API, tool eseguiti solo nel sandbox."""
+"""Fix agent (Ripperdoc): loop agentico sulla Messages API, tool eseguiti solo nel sandbox.
+
+Come ogni buon ripperdoc: niente chrome installato senza prima aver letto la cartella
+clinica (il task), e il paziente non esce finché i test non sono verdi.
+"""
 
 from __future__ import annotations
 

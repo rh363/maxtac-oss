@@ -28,5 +28,8 @@ RUN groupadd -g 1000 autofix && useradd -u 1000 -g 1000 -M -d /nonexistent -s /u
 USER 1000:1000
 ENV PATH=/opt/autofix/bin:$PATH AUTOFIX_CONFIG=/etc/autofix/config.yaml
 
+LABEL org.opencontainers.image.title="autofix-web" \
+      org.opencontainers.image.description="Autofix: dashboard in sola lettura"
+
 ENTRYPOINT ["tini", "--", "autofix"]
 CMD ["web"]

@@ -36,20 +36,20 @@ RUN python -m venv /opt/scanners \
       -r /tmp/tools-requirements.txt \
  && rm /tmp/tools-requirements.txt \
  && ln -s /opt/scanners/bin/semgrep /usr/local/bin/semgrep \
- && ln -s /opt/scanners/bin/pysemgrep /usr/local/bin/pysemgrep \
- && ln -s /opt/scanners/bin/bandit /usr/local/bin/bandit
+ && ln -s /opt/scanners/bin/bandit /usr/local/bin/bandit \
+ && if [ -e /opt/scanners/bin/pysemgrep ]; then \
+      ln -s /opt/scanners/bin/pysemgrep /usr/local/bin/pysemgrep; fi \
+ && semgrep --version && bandit --version
 
 # Ruleset semgrep scaricati al build: a runtime semgrep lavora offline su file locali
 # (/opt/semgrep-rules/p-default.yml...). Ogni ruleset usato in config deve stare qui.
 ARG SEMGREP_RULESETS="p/default p/python p/golang p/javascript p/typescript"
-RUN mkdir -p /opt/semgrep-rules && for rs in ${SEMGREP_RULESETS}; do \
-      out="/opt/semgrep-rules/$(echo "$rs" | tr '/' '-').yml"; \
-      python -c 'import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' \
-        "https://semgrep.dev/c/${rs}" "$out"; \
-      test -s "$out"; \
-    done
+COPY fetch-semgrep-rules.py /tmp/fetch-semgrep-rules.py
+RUN python /tmp/fetch-semgrep-rules.py /opt/semgrep-rules ${SEMGREP_RULESETS} \
+ && rm /tmp/fetch-semgrep-rules.py
 
 # Database OSV offline per PyPI, Go e npm: a runtime osv-scanner non va in rete.
+# Il seed contiene versioni vulnerabili note: se il db non si scarica, la build fallisce.
 ENV OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY=/opt/osv-db
 RUN mkdir -p /opt/osv-db /tmp/osv-seed && cd /tmp/osv-seed \
  && printf 'requests==2.19.0\n' > requirements.txt \
@@ -57,12 +57,16 @@ RUN mkdir -p /opt/osv-db /tmp/osv-seed && cd /tmp/osv-seed \
  && printf '{"name":"seed","lockfileVersion":3,"packages":{"":{"name":"seed"},"node_modules/lodash":{"version":"4.17.0"}}}' > package-lock.json \
  && (osv-scanner scan source --offline-vulnerabilities --download-offline-databases \
       --recursive . || test $? -eq 1) \
- && test -n "$(ls -A /opt/osv-db)" \
+ && { test -n "$(ls -A /opt/osv-db)" \
+      || { echo "database OSV offline vuoto: controlla i flag offline di osv-scanner" >&2; exit 1; }; } \
  && rm -rf /tmp/osv-seed && chmod -R a+rX /opt/osv-db
 
 ENV PATH=/usr/local/go/bin:$PATH \
     GOTOOLCHAIN=local \
     SEMGREP_SEND_METRICS=off
+
+LABEL org.opencontainers.image.title="autofix-sandbox" \
+      org.opencontainers.image.description="Ambiente isolato di Autofix: toolchain e scanner, nessun segreto"
 
 # uid 1000 come l'orchestrator: i file scritti in /work restano gestibili da git.
 RUN groupadd -g 1000 sandbox && useradd -u 1000 -g 1000 -m -d /home/sandbox -s /bin/sh sandbox

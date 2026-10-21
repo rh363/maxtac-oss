@@ -1,9 +1,14 @@
 # Autofix su una VM dedicata. I sandbox non stanno qui: li crea l'orchestrator a ogni task,
 # sulla rete `autofix_sandbox`, con HTTPS_PROXY=http://proxy:3128.
+#
+# Immagini pubblicate su GHCR dalla CI (private: serve `docker login ghcr.io`). Si sceglie la
+# versione con AUTOFIX_TAG (default `main`, oppure `sha-<commit>` o `v1.2.3`) o si fissa ogni
+# immagine per digest con AUTOFIX_ORCHESTRATOR_IMAGE / AUTOFIX_WEB_IMAGE / AUTOFIX_SANDBOX_IMAGE.
+# `build:` resta per chi costruisce in locale: `docker compose build` usa gli stessi nomi.
 services:
   orchestrator:
     build: .
-    image: autofix-orchestrator:latest
+    image: ${AUTOFIX_ORCHESTRATOR_IMAGE:-ghcr.io/rh363/autofix-orchestrator:${AUTOFIX_TAG:-main}}
     restart: unless-stopped
     command: ["schedule"]
     user: "1000:1000"
@@ -11,6 +16,7 @@ services:
     secrets: [anthropic_api_key]
     environment:
       AUTOFIX_CONFIG: /etc/autofix/config.yaml
+      AUTOFIX_SANDBOX_IMAGE: ${AUTOFIX_SANDBOX_IMAGE:-ghcr.io/rh363/autofix-sandbox:${AUTOFIX_TAG:-main}}
       TZ: Europe/Rome
     volumes:
       - ./config.yaml:/etc/autofix/config.yaml:ro
@@ -48,7 +54,7 @@ services:
   # La porta è pubblicata solo su loopback: davanti serve un reverse proxy con TLS.
   web:
     build: {context: ., dockerfile: Dockerfile.web}
-    image: autofix-web:latest
+    image: ${AUTOFIX_WEB_IMAGE:-ghcr.io/rh363/autofix-web:${AUTOFIX_TAG:-main}}
     restart: unless-stopped
     command: ["web"]
     profiles: [web]
@@ -72,11 +78,13 @@ services:
       timeout: 10s
       retries: 3
 
-  # Solo per costruire l'immagine dei sandbox: `docker compose build sandbox-image`.
+  # Immagine dei sandbox: non è un servizio da avviare, la lancia l'orchestrator a ogni task.
+  # Sta qui solo per scaricarla (`docker compose --profile sandbox pull`) o costruirla in
+  # locale (`docker compose --profile sandbox build sandbox-image`).
   sandbox-image:
     build: ./sandbox
-    image: autofix-sandbox:latest
-    profiles: [build]
+    image: ${AUTOFIX_SANDBOX_IMAGE:-ghcr.io/rh363/autofix-sandbox:${AUTOFIX_TAG:-main}}
+    profiles: [sandbox]
 
 networks:
   egress: {}

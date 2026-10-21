@@ -1,0 +1,143 @@
+# Test, lint e build delle immagini (senza pubblicarle). Gira su ogni PR; su main lo lancia
+# release.yml prima di pubblicare, così si pubblica solo ciò che ha passato questi controlli.
+# Le azioni di terze parti sono pinnate per SHA (scripts/pin-actions.sh le aggiorna).
+name: ci
+
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_VERSION: "0.11.30"
+  NODE_VERSION: "22.22.0"
+
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: git identity for tests that create commits
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@example.com"
+      - run: uv run pytest -W error
+      - run: uv run ruff check src tests scripts
+      - run: uv run ruff format --check src tests scripts
+      - run: uv run mypy src
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: build (fails if the bundle contains alternative-theme terms)
+        run: npm run build
+      - run: npm run check
+      - run: npm run lint
+      - run: npm test
+      - name: e2e (Playwright, Chromium)
+        run: |
+          (cd .. && uv sync --frozen)
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: playwright-traces
+          path: frontend/test-results
+          retention-days: 7
+
+  docker-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: autofix-orchestrator
+            context: .
+            file: Dockerfile
+          - image: autofix-web
+            context: .
+            file: Dockerfile.web
+          - image: autofix-sandbox
+            context: sandbox
+            file: sandbox/Dockerfile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: build ${{ matrix.image }} (no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: false
+          load: true
+          tags: ${{ matrix.image }}:ci
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      - name: save image for the smoke test
+        run: docker save ${{ matrix.image }}:ci | gzip -1 > /tmp/${{ matrix.image }}.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: image-${{ matrix.image }}
+          path: /tmp/${{ matrix.image }}.tar.gz
+          retention-days: 1
+
+  docker-smoke:
+    needs: docker-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: image-*
+          merge-multiple: true
+          path: /tmp/images
+      - run: for f in /tmp/images/*.tar.gz; do gunzip -c "$f" | docker load; done
+      - name: images work offline with a read-only rootfs
+        run: ./scripts/smoke-images.sh autofix-orchestrator:ci autofix-web:ci autofix-sandbox:ci
+      - name: compose file is valid and third-party images exist
+        env:
+          DOCKER_GID: "999"
+        run: |
+          docker compose --profile web --profile sandbox config --quiet
+          docker compose pull proxy

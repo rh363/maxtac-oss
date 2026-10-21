@@ -95,7 +95,7 @@ web:
 
 # Container effimeri per scan, fix e verifica. Mai root; nessun segreto dentro.
 sandbox:
-  image: autofix-sandbox:latest
+  # image: con il compose la sceglie AUTOFIX_SANDBOX_IMAGE (default: quella di AUTOFIX_TAG)
   network: autofix_sandbox        # rete Docker internal: esce solo dal proxy
   proxy_url: http://proxy:3128
   user: "1000:1000"               # stesso uid dell'orchestrator

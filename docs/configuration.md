@@ -172,7 +172,8 @@ autofix.example.it {
 
 ### `sandbox`
 
-`image` (`autofix-sandbox:latest`), `network` (`autofix_sandbox`, rete Docker `internal`),
+`image` (`ghcr.io/rh363/autofix-sandbox:main`; con il compose vince la variabile
+`AUTOFIX_SANDBOX_IMAGE`, che segue `AUTOFIX_TAG`), `network` (`autofix_sandbox`, rete Docker `internal`),
 `proxy_url` (`http://proxy:3128`), `user` (`1000:1000`, mai root), `mem_limit` (`4g`), `cpus`
 (2.0), `pids_limit` (512).
 

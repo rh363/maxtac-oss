@@ -110,4 +110,26 @@ repository e impostazioni, desktop e mobile (per esempio `neutral-dashboard-desk
   (installato nell'immagine con `--require-hashes`).
 - `scripts/pin-digests.sh`: risolve i digest delle immagini base e li scrive nei Dockerfile e
   nel compose; `--check` esce con errore se mancano. Va lanciato dove c'è accesso ai registry.
-- `scripts/rebuild-sandbox.sh`: ricostruzione settimanale dell'immagine dei sandbox.
+- `scripts/rebuild-sandbox.sh`: ricostruzione locale dell'immagine dei sandbox.
+- `scripts/smoke-images.sh <orchestrator> <web> <sandbox>`: prova le immagini senza rete e con
+  rootfs in sola lettura (la usa la CI dopo la build).
+
+## CI e immagini
+
+- `.github/workflows/ci.yml`, a ogni PR (e riusato da `release.yml`): pytest, ruff, mypy;
+  build, check, lint, vitest e Playwright del frontend; build delle tre immagini senza push e
+  `scripts/smoke-images.sh`; validità del compose e esistenza dell'immagine del proxy.
+- `.github/workflows/release.yml`: dopo il CI verde pubblica su
+  `ghcr.io/rh363/autofix-{orchestrator,web,sandbox}` (private). Push su `main`: tag `main` e
+  `sha-<commit>`; tag `v*`: semver e `latest`; lunedì 04:17 UTC: solo il sandbox, senza
+  cache. Ogni immagine ha provenance e SBOM di buildx ed è firmata con cosign keyless; il
+  riepilogo della run riporta i digest. Etichette OCI neutre (titolo e descrizione per
+  immagine).
+- Le azioni sono pinnate per SHA con la versione in commento: `scripts/pin-actions.sh` le
+  controlla, `--fix` riscrive i pin che non corrispondono al tag.
+- Il compose usa le immagini pubblicate (`AUTOFIX_TAG`, oppure `AUTOFIX_*_IMAGE` con un
+  digest) e tiene `build:` per la build locale con gli stessi nomi. L'orchestrator lancia i
+  sandbox con `AUTOFIX_SANDBOX_IMAGE`, che il compose valorizza come il servizio
+  `sandbox-image` (profilo `sandbox`, solo per pull e build). Se l'immagine non è sull'host,
+  `DockerSandbox` si ferma con un errore chiaro invece di provare a scaricarla: il registry è
+  privato e le credenziali ce le ha solo la VM.

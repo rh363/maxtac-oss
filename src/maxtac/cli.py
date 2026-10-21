@@ -25,6 +25,7 @@ from maxtac.presentation.report import (
     render_scan,
     render_status,
     scan_json,
+    signoff,
     token_line,
 )
 
@@ -140,6 +141,8 @@ def cmd_run(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
     report = c.pipeline(dry_run=args.dry_run).run_night(repos)
     path = _write_report(c.config, report)
     print(render_run(report, lx))
+    if line := signoff(report, lx):
+        print(line)
     print(f"report: {path}")
     return 0 if all(not r.errors for r in report.repos) else 1
 

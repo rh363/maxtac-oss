@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -153,9 +154,12 @@ class Container:
 
     def sandboxes(self) -> DockerSandbox:
         s = self.config.sandbox
+        # Con il compose l'immagine arriva da AUTOFIX_SANDBOX_IMAGE (tag o digest pubblicato),
+        # la stessa che `docker compose --profile sandbox pull` scarica.
+        image = os.environ.get("AUTOFIX_SANDBOX_IMAGE") or s.image
         return DockerSandbox(
             SandboxSpec(
-                image=s.image,
+                image=image,
                 network=s.network,
                 proxy_url=s.proxy_url,
                 user=s.user,

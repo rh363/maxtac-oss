@@ -102,7 +102,10 @@ class NightBudget:
 
 
 class Meter:
-    """Tetto di un singolo task (o del bug hunting) dentro il tetto della notte."""
+    """Tetto di un singolo task (o del bug hunting) dentro il tetto della notte.
+
+    Gli eddies non crescono sugli alberi: un task che arriva al tetto si ferma.
+    """
 
     def __init__(self, night: NightBudget, scope: str, cap_usd: float) -> None:
         self._night = night

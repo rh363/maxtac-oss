@@ -9,7 +9,7 @@ from collections.abc import Callable, Sequence
 from datetime import date
 from typing import Any
 
-from maxtac.domain.models import FindingRecord, RunReport, RunSummary, TokenInfo
+from maxtac.domain.models import FindingRecord, Outcome, RunReport, RunSummary, TokenInfo
 from maxtac.domain.policy import group_into_tasks, token_state
 from maxtac.services.scan import ScanResult
 
@@ -63,6 +63,19 @@ def render_run(report: RunReport, lx: Lexicon) -> str:
             lines.append(f"- errore: {safe(err)}")
         lines.append("")
     return "\n".join(lines)
+
+
+def signoff(report: RunReport, lx: Lexicon) -> str | None:
+    """Riga di chiusura per il terminale dell'operatore. Il lessico neutro non ne ha."""
+    if report.aborted or any(r.errors for r in report.repos):
+        return None
+    fixes = [fx for r in report.repos for fx in r.fixes]
+    mrs = len(report.mrs_opened)
+    if mrs and lx.clean_sweep and all(fx.outcome is Outcome.MR_OPENED for fx in fixes):
+        return lx.clean_sweep.format(n=mrs)
+    if lx.quiet_night and not fixes and not any(r.findings_new for r in report.repos):
+        return lx.quiet_night
+    return None
 
 
 def render_status(

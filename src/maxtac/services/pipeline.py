@@ -449,6 +449,7 @@ class Pipeline:
     ) -> tuple[bool, str]:
         """Verifica indipendente: test verdi, finding spariti e nessun finding nuovo dello
         stesso scanner. Si rilanciano solo gli scanner del task.
+        A Night City nessuno si fida sulla parola, nemmeno di un agente che dice "fatto".
 
         Test e rescan stanno in due sandbox diversi: setup e test eseguono codice del repo,
         che potrebbe lasciare scanner finti nella home o file nella working tree. Prima del

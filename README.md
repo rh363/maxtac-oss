@@ -19,10 +19,15 @@ La documentazione tecnica (architettura, sicurezza, configurazione completa, svi
   finiti Autofix si ferma da solo fino al mese dopo.
 - Uno o più **token GitLab**: come ottenerli senza essere admin è spiegato al passo 2.
 - Per la dashboard (facoltativa): un nome a dominio e un reverse proxy con TLS davanti.
+- Accesso dalla VM a **`ghcr.io`**, dove sono pubblicate le immagini (private), e un account
+  GitHub che possa leggerle.
 
 ## Installazione
 
 ### 1. Scarica il progetto
+
+Sulla VM non serve il codice, ma solo alcuni file: `docker-compose.yml`, `config.example.yaml`,
+`proxy/squid.conf` e la cartella `scripts/`. Il modo più semplice è clonare il repo:
 
 ```bash
 git clone <url-del-repo> /opt/autofix
@@ -116,16 +121,47 @@ delle persone che possono entrare nella dashboard.
 `ca/gitlab-ca.pem`, togli il commento alle righe `gitlab-ca.pem` in `docker-compose.yml` e
 aggiungi `ca_bundle: /etc/autofix/gitlab-ca.pem` sotto `gitlab:`.
 
-### 5. Costruisci e avvia
+### 5. Scarica e avvia
+
+Le immagini sono pubblicate dalla CI su GitHub Container Registry, come pacchetti privati. Per
+scaricarle serve un token GitHub **classic** con il solo permesso **`read:packages`**
+(*GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)*): i
+token fine-grained non funzionano con il registry dei container.
 
 ```bash
-export DOCKER_GID=$(stat -c %g /var/run/docker.sock)
-docker compose --profile build build sandbox-image   # ambiente isolato dove girano scanner e fix
-docker compose up -d --build                         # Autofix + proxy di uscita
+echo 'TOKEN-GITHUB' | docker login ghcr.io -u <utente-github> --password-stdin
 ```
 
-Conviene mettere `DOCKER_GID` anche in un file `.env` accanto a `docker-compose.yml`, così i
-comandi successivi lo trovano da soli.
+Crea un file `.env` accanto a `docker-compose.yml`:
+
+```bash
+echo "DOCKER_GID=$(stat -c %g /var/run/docker.sock)" > .env
+echo "AUTOFIX_TAG=main" >> .env
+```
+
+`AUTOFIX_TAG` sceglie la versione: `main` è l'ultima pubblicata, `sha-<commit>` o `v1.2.3`
+una versione precisa. Poi:
+
+```bash
+./scripts/update.sh      # scarica le immagini (compreso l'ambiente isolato) e avvia
+```
+
+`update.sh` fa `docker compose pull` e `docker compose up -d`. L'ambiente isolato dove girano
+scanner e fix non è un servizio: viene solo scaricato, lo avvia Autofix quando serve.
+
+Per controllare che le immagini siano proprio quelle firmate dalla CI di questo repo (serve
+[cosign](https://docs.sigstore.dev/cosign/system_config/installation/)):
+
+```bash
+./scripts/verify-images.sh
+```
+
+**In alternativa, costruire in locale** (serve tutto il repo e più tempo):
+
+```bash
+docker compose --profile sandbox build sandbox-image
+docker compose up -d --build
+```
 
 ### 6. Primo controllo
 
@@ -309,15 +345,19 @@ purché la ricarica automatica sia spenta sulla Console Anthropic.
 
 ## Manutenzione
 
-- **Aggiornare gli scanner (ogni settimana).** Ricostruisci l'ambiente isolato per avere
-  scanner e database delle vulnerabilità aggiornati. Da cron, la domenica mattina:
+- **Aggiornare gli scanner (ogni settimana).** La CI ripubblica l'ambiente isolato ogni lunedì
+  mattina con scanner e database delle vulnerabilità aggiornati. Per portarlo sulla VM, da
+  cron il lunedì:
 
   ```
-  0 5 * * 0  cd /opt/autofix && ./scripts/rebuild-sandbox.sh >> /var/log/autofix-rebuild.log 2>&1
+  0 8 * * 1  cd /opt/autofix && ./scripts/update.sh >> /var/log/autofix-update.log 2>&1
   ```
 
-- **Aggiornare Autofix.** `git pull`, poi `docker compose up -d --build` (e
-  `docker compose --profile web up -d --build web` se usi la dashboard).
+  Se costruisci in locale, usa invece `./scripts/rebuild-sandbox.sh`.
+
+- **Aggiornare Autofix.** `git pull` (per compose e script aggiornati), poi
+  `./scripts/update.sh`: aggiorna anche la dashboard se è in uso. Per tornare a una versione
+  precedente, imposta `AUTOFIX_TAG=sha-<commit>` nel file `.env` e rilancia lo script.
 - **Backup.** Lo stato (problemi già visti, MR aperte, storico e spesa) è nel file
   `/var/lib/autofix/autofix.sqlite3`. Copialo quando Autofix non sta girando, per esempio di
   pomeriggio:
