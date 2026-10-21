@@ -64,10 +64,37 @@ class FakeContainers:
         return self.container
 
 
+class ImageNotFound(Exception):  # stesso nome dell'eccezione del docker SDK
+    pass
+
+
+class FakeImages:
+    def __init__(self, present: bool = True) -> None:
+        self.present = present
+
+    def get(self, name: str) -> object:
+        if not self.present:
+            raise ImageNotFound(name)
+        return object()
+
+
 class FakeDocker:
-    def __init__(self, outputs: list[tuple[int, list[bytes]]] | None = None) -> None:
+    def __init__(
+        self, outputs: list[tuple[int, list[bytes]]] | None = None, *, image: bool = True
+    ) -> None:
         self.containers = FakeContainers()
         self.api = FakeAPI(outputs or [])
+        self.images = FakeImages(image)
+
+
+def test_missing_image_fails_with_clear_message_and_no_pull(tmp_path: Path) -> None:
+    from maxtac.adapters.docker_sandbox import SandboxImageMissing
+
+    client = FakeDocker(image=False)
+    sb = DockerSandbox(SPEC, client=client)
+    with pytest.raises(SandboxImageMissing, match="autofix-sandbox:test"), sb.open(tmp_path):
+        pass
+    assert client.containers.kwargs == {}, "senza immagine non si avvia (né si scarica) nulla"
 
 
 def test_hardening_parameters(tmp_path: Path, monkeypatch: Any) -> None:

@@ -110,7 +110,7 @@ class GitLabConf(_Model):
 
 
 class SandboxConf(_Model):
-    image: str = "autofix-sandbox:latest"
+    image: str = "ghcr.io/rh363/autofix-sandbox:main"  # sovrascritta da AUTOFIX_SANDBOX_IMAGE
     network: str = "autofix_sandbox"
     proxy_url: str = "http://proxy:3128"
     user: str = Field(default="1000:1000", pattern=r"^[1-9]\d*(:[1-9]\d*)?$")  # mai root

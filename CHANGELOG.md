@@ -9,8 +9,18 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+- CI con GitHub Actions (`ci.yml`): test e lint Python e frontend, Playwright, build delle tre
+  immagini senza push e prova senza rete con rootfs in sola lettura (`scripts/smoke-images.sh`).
+- Pubblicazione su GHCR (`release.yml`) dopo il CI verde: `autofix-orchestrator`,
+  `autofix-web`, `autofix-sandbox`, private, con tag `main`/`sha-<commit>`/semver, provenance,
+  SBOM e firma cosign keyless; rebuild settimanale del sandbox il lunedì.
+- `scripts/update.sh` (pull, sandbox compreso, e riavvio), `scripts/verify-images.sh` (firma
+  cosign), `scripts/pin-actions.sh` (SHA delle azioni).
+- `DockerSandbox`: errore chiaro se l'immagine dei sandbox manca sull'host, senza tentare il
+  pull (il registry è privato).
 - Dashboard: il comando da copiare nella pagina Repository segue il lessico dell'utente
   (etichetta `cli.name`); il server scrive sempre il comando neutro `autofix`.
+
 - Più token GitLab: `gitlab.tokens` con un nome e i prefissi di path coperti (gruppo,
   sottogruppo o progetto); ogni repo usa il token con il prefisso più specifico. I valori
   stanno in `secrets/gitlab_tokens/<nome>` (montata dal compose) o in `GITLAB_TOKEN_<NOME>`.
@@ -20,6 +30,21 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
   pagina Impostazioni della dashboard, con avviso 30 giorni prima della scadenza; token usato
   da ogni repo e proposta nella pagina Repository e in `autofix repos list/show`.
 - `autofix schedule` (lo scheduler; il vecchio nome resta accettato ma non è più documentato).
+
+### Changed
+
+- Il compose usa le immagini di GHCR (`AUTOFIX_TAG`, oppure `AUTOFIX_*_IMAGE` per digest) e
+  tiene `build:` per la build locale; profilo `sandbox` al posto di `build` per l'immagine dei
+  sandbox, che l'orchestrator riceve in `AUTOFIX_SANDBOX_IMAGE`. Default di `sandbox.image`:
+  `ghcr.io/rh363/autofix-sandbox:main`.
+- README: il passo "Costruisci e avvia" diventa "Scarica e avvia" (login a GHCR, `.env`,
+  `update.sh`); la build locale resta come alternativa.
+
+### Fixed
+
+- `sandbox/Dockerfile`: ruleset semgrep scaricati con retry, User-Agent e controllo del
+  contenuto (`sandbox/fetch-semgrep-rules.py`); link `pysemgrep` solo se esiste; errore
+  esplicito se il database OSV offline resta vuoto.
 
 ### Changed
 

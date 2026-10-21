@@ -541,6 +541,7 @@ def test_exec_watchdog_kills_hung_container(tmp_path: Path, monkeypatch: Any) ->
     client = type("C", (), {})()
     client.api = api
     client.containers = type("Cs", (), {"run": lambda self, **kw: container})()
+    client.images = type("Is", (), {"get": lambda self, name: object()})()
     with DockerSandbox(SandboxSpec(), client).open(tmp_path) as s:
         r = s.exec("setsid sleep inf &", timeout=0)
     assert container.killed

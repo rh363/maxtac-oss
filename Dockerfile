@@ -19,5 +19,8 @@ RUN groupadd -g 1000 autofix && useradd -u 1000 -g 1000 -M -d /nonexistent -s /u
 USER 1000:1000
 ENV PATH=/opt/autofix/bin:$PATH AUTOFIX_CONFIG=/etc/autofix/config.yaml
 
+LABEL org.opencontainers.image.title="autofix-orchestrator" \
+      org.opencontainers.image.description="Autofix: run notturna di scan, fix verificati e merge request"
+
 ENTRYPOINT ["tini", "--", "autofix"]
 CMD ["schedule"]

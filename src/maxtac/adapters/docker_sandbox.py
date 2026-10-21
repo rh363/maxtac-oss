@@ -250,10 +250,30 @@ class DockerSession:
         return [line for line in out.decode("utf-8", errors="replace").splitlines() if line]
 
 
+class SandboxImageMissing(RuntimeError):
+    """L'immagine dei sandbox non è sull'host. Non la scarichiamo da qui: il registry è privato
+    e l'orchestrator non ne ha le credenziali (le ha solo `docker login` sulla VM)."""
+
+
 class DockerSandbox:
     def __init__(self, spec: SandboxSpec, client: Any | None = None) -> None:
         self.spec = spec
         self._client = client
+        self._image_ok = False
+
+    def _ensure_image(self) -> None:
+        if self._image_ok:
+            return
+        try:
+            self.client.images.get(self.spec.image)
+        except Exception as e:
+            if type(e).__name__ != "ImageNotFound":
+                raise
+            raise SandboxImageMissing(
+                f"immagine dei sandbox {self.spec.image} assente sull'host: "
+                "scaricala con scripts/update.sh (o `docker compose --profile sandbox pull`)"
+            ) from None
+        self._image_ok = True
 
     @property
     def client(self) -> Any:
@@ -265,6 +285,7 @@ class DockerSandbox:
 
     @contextmanager
     def open(self, worktree: Path) -> Iterator[DockerSession]:
+        self._ensure_image()
         container = self.client.containers.run(**run_kwargs(self.spec, worktree.resolve()))
         try:
             yield DockerSession(self.client, container, self.spec)
