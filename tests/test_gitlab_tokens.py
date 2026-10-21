@@ -433,4 +433,7 @@ def test_gitlab_client_has_timeout(tmp_path: Path) -> None:
     assert cfg.gitlab.timeout_s == 30.0
     data["gitlab"]["timeout_s"] = 5
     c = Container.build(load_config(write(tmp_path, data)))
-    assert c._client(SECRET).timeout == 5
+    try:
+        assert c._client(SECRET).timeout == 5
+    finally:
+        c.conn.close()
