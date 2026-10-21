@@ -73,7 +73,11 @@ printf '%s' 'TOKEN-DEL-PROGETTO' > secrets/gitlab_tokens/tools      # Project Ac
 
 ```bash
 printf '%s' 'LA-TUA-CHIAVE' > secrets/anthropic_api_key
+chown -R 1000:1000 secrets && chmod -R go= secrets
 ```
+
+I servizi girano con l'utente 1000, non root: i file in `secrets/` devono essere suoi, se no
+non riescono a leggerli. Ripeti il `chown` ogni volta che aggiungi o sostituisci un segreto.
 
 I segreti stanno solo in `secrets/` e non finiscono mai nella configurazione, nei log o nei
 repo.
@@ -287,6 +291,7 @@ Add new application**.
 ```bash
 printf '%s' 'SECRET-DELL-APPLICATION' > secrets/oidc_client_secret
 python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")' > secrets/web_session_secret
+chown -R 1000:1000 secrets && chmod -R go= secrets
 ```
 
 **3. Configura chi può entrare** nel `config.yaml`:
