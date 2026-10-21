@@ -24,9 +24,11 @@ osv-scanner offline che trova una CVE nota, semgrep con i ruleset dell'immagine,
 
 - VM dedicata: il socket Docker montato nell'orchestrator equivale a root sull'host.
 - Immagini da GHCR: dopo la prima pubblicazione, in *GitHub → Packages* controllare che
-  `autofix-orchestrator`, `autofix-web` e `autofix-sandbox` siano **Private** e collegati al
-  repo (*Package settings → Manage Actions access*: il repo deve avere il ruolo Write, così la
-  CI può aggiornarli). Sulla VM `docker login ghcr.io` con un token classic `read:packages`.
+  `autofix-orchestrator`, `autofix-web` e `autofix-sandbox` siano collegati al repo
+  (*Package settings → Manage Actions access*: il repo deve avere il ruolo Write, così la CI può
+  aggiornarli). Le immagini sono pubbliche per scelta: non contengono segreti, quindi sulla VM
+  non serve `docker login`. Per renderle private: *Package settings → Change visibility*, poi
+  `docker login ghcr.io` sulla VM con un token classic `read:packages`.
 - Versione fissata: nel `.env` della VM `AUTOFIX_TAG=sha-<commit>`, oppure le tre variabili
   `AUTOFIX_*_IMAGE` con i digest che il job `publish` scrive nel riepilogo della run.
   `./scripts/verify-images.sh` controlla la firma cosign.
@@ -49,7 +51,6 @@ printf '%s' "$ANTHROPIC_KEY" > secrets/anthropic_api_key
 mkdir -p secrets/gitlab_tokens
 printf '%s' "$GITLAB_TOKEN_TEAM" > secrets/gitlab_tokens/team   # uno per voce di gitlab.tokens
 cp config.example.yaml config.yaml
-echo 'TOKEN-GITHUB' | docker login ghcr.io -u <utente-github> --password-stdin
 echo "DOCKER_GID=$(stat -c %g /var/run/docker.sock)" > .env
 echo "AUTOFIX_TAG=main" >> .env
 ./scripts/update.sh                                         # pull (sandbox compreso) e avvio

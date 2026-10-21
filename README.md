@@ -19,8 +19,8 @@ La documentazione tecnica (architettura, sicurezza, configurazione completa, svi
   finiti Autofix si ferma da solo fino al mese dopo.
 - Uno o più **token GitLab**: come ottenerli senza essere admin è spiegato al passo 2.
 - Per la dashboard (facoltativa): un nome a dominio e un reverse proxy con TLS davanti.
-- Accesso dalla VM a **`ghcr.io`**, dove sono pubblicate le immagini (private), e un account
-  GitHub che possa leggerle.
+- Accesso dalla VM a **`ghcr.io`**, dove sono pubblicate le immagini (pubbliche, non serve
+  un account).
 
 ## Installazione
 
@@ -123,14 +123,8 @@ aggiungi `ca_bundle: /etc/autofix/gitlab-ca.pem` sotto `gitlab:`.
 
 ### 5. Scarica e avvia
 
-Le immagini sono pubblicate dalla CI su GitHub Container Registry, come pacchetti privati. Per
-scaricarle serve un token GitHub **classic** con il solo permesso **`read:packages`**
-(*GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)*): i
-token fine-grained non funzionano con il registry dei container.
-
-```bash
-echo 'TOKEN-GITHUB' | docker login ghcr.io -u <utente-github> --password-stdin
-```
+Le immagini sono pubblicate dalla CI su GitHub Container Registry e sono pubbliche: si
+scaricano senza login. Non contengono segreti: chiavi, token e configurazione restano sulla VM.
 
 Crea un file `.env` accanto a `docker-compose.yml`:
 

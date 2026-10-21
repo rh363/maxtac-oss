@@ -52,6 +52,7 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Changed
 
+- Immagini su GHCR pubbliche: README e go-live non chiedono più `docker login`.
 - Il compose usa le immagini di GHCR (`AUTOFIX_TAG`, oppure `AUTOFIX_*_IMAGE` per digest) e
   tiene `build:` per la build locale; profilo `sandbox` al posto di `build` per l'immagine dei
   sandbox, che l'orchestrator riceve in `AUTOFIX_SANDBOX_IMAGE`. Default di `sandbox.image`:

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Aggiorna Autofix sulla VM: scarica le immagini (sandbox compreso), riavvia i servizi e
-# toglie le immagini vecchie. Richiede `docker login ghcr.io` fatto una volta.
+# toglie le immagini vecchie. Le immagini sono pubbliche: non serve `docker login`.
 # Chrome aggiornato ogni settimana: meglio che nel distretto, e senza effetti collaterali.
 # Il sandbox viene ricostruito dalla CI ogni lunedì alle 04:17 UTC: un cron dopo quell'ora
 # lo porta sulla VM, per esempio il lunedì alle 08:00:
