@@ -2,7 +2,10 @@
 	import { Check, Copy } from '@lucide/svelte';
 	import { t } from '$lib/lexicon/index.svelte';
 
-	let { command }: { command: string } = $props();
+	let { command: raw }: { command: string } = $props();
+
+	// Il server scrive sempre il comando neutro; il nome mostrato segue il lessico dell'utente.
+	const command = $derived(raw.replace(/^autofix\b/, t('cli.name')));
 
 	let copied = $state(false);
 	let code = $state<HTMLElement>();

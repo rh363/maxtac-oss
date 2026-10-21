@@ -95,6 +95,7 @@ CYBERPUNK = Lexicon(
     # Override delle etichette della dashboard (chiavi di frontend/src/lib/lexicon/neutral.json)
     ui={
         "brand": "MaxTac",
+        "cli.name": "maxtac",
         "brandSub": "Autofix · edizione operatore",
         "greeting": "Bentornato, {user}",
         "nextRun": "Prossima run {time} · il Blackwall regge",

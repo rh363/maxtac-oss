@@ -197,6 +197,7 @@
 	"proposal.check": "Da controllare",
 	"proposal.approve": "Per approvarla, sull'orchestrator:",
 	"proposal.readonly": "La dashboard è in sola lettura: l'approvazione si fa solo da riga di comando.",
+	"cli.name": "autofix",
 	"copy": "Copia",
 	"copied": "Copiato",
 	"empty.proposals": "Nessuna proposta.",

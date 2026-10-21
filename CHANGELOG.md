@@ -9,6 +9,8 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+- Dashboard: il comando da copiare nella pagina Repository segue il lessico dell'utente
+  (etichetta `cli.name`); il server scrive sempre il comando neutro `autofix`.
 - Più token GitLab: `gitlab.tokens` con un nome e i prefissi di path coperti (gruppo,
   sottogruppo o progetto); ogni repo usa il token con il prefisso più specifico. I valori
   stanno in `secrets/gitlab_tokens/<nome>` (montata dal compose) o in `GITLAB_TOKEN_<NOME>`.

@@ -126,15 +126,17 @@ test('repository attivi e proposte dell autodiscovery, senza scritture', async (
 	const legacy = proposals.filter({ hasText: 'alex/legacy-cron' });
 	await expect(legacy.getByText("il test command ignora l'exit code (|| true)")).toBeVisible();
 	await expect(legacy.getByText('Rossa')).toBeVisible();
-	await expect(legacy.getByText('autofix repos approve alex/legacy-cron --force')).toBeVisible();
+	// il nome del comando segue il lessico: maxtac per l'operatore, autofix per gli altri
+	const cli = test.info().project.name === 'operator' ? 'maxtac' : 'autofix';
+	await expect(legacy.getByText(`${cli} repos approve alex/legacy-cron --force`)).toBeVisible();
 	const update = proposals.filter({ hasText: 'alex/status-page' });
 	await expect(update.getByTestId('changes')).toContainText('npm run test:ci');
 	await expect(
-		update.getByText('autofix repos approve alex/status-page', { exact: true })
+		update.getByText(`${cli} repos approve alex/status-page`, { exact: true })
 	).toBeVisible();
 	await expect(proposals.filter({ hasText: 'Sostituita' })).toHaveCount(1);
 	const rejected = proposals.filter({ hasText: 'Rifiutata' });
-	await expect(rejected.getByText(/autofix repos approve/)).toHaveCount(0);
+	await expect(rejected.getByText(/(autofix|maxtac) repos approve/)).toHaveCount(0);
 	expect(writes).toEqual([]);
 	expect(w.problems).toEqual([]);
 });
