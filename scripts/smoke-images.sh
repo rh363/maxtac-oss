@@ -4,7 +4,10 @@
 #   ./scripts/smoke-images.sh <orchestrator> <web> <sandbox>
 set -eu
 ORCH="$1"; WEB="$2"; SBX="$3"
-RUN="docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true"
+BASE="docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true"
+RUN="$BASE --tmpfs /tmp"
+# stesse opzioni tmpfs di adapters/docker_sandbox.py: /tmp e home scrivibili dall'utente del sandbox
+TMPFS_OPTS="rw,nosuid,nodev,mode=1777"
 
 echo "== orchestrator: CLI"
 $RUN "$ORCH" --help >/dev/null
@@ -19,7 +22,7 @@ assert p.is_file(), p
 print("spa:", p)'
 
 echo "== sandbox: strumenti"
-SB="$RUN --tmpfs /home/sandbox --tmpfs /work:uid=1000,gid=1000 --user 1000:1000 $SBX"
+SB="$BASE --tmpfs /tmp:$TMPFS_OPTS --tmpfs /home/sandbox:$TMPFS_OPTS --tmpfs /work:uid=1000,gid=1000 --user 1000:1000 $SBX"
 for cmd in "python --version" "go version" "node --version" "npm --version" "git --version" \
            "/usr/local/bin/semgrep --version" "/usr/local/bin/bandit --version" \
            "/usr/local/bin/gosec -version" "/usr/local/bin/osv-scanner --version"; do
