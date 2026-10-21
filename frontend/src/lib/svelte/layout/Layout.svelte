@@ -66,7 +66,8 @@
 
 <div class="bg-bg text-ink flex min-h-screen flex-wrap">
 	<aside
-		class="bg-side border-line box-border flex flex-[1_1_220px] flex-col gap-6 border-r px-4 py-5 lg:max-w-[260px]"
+		class="bg-side border-line box-border flex flex-[1_1_220px] flex-col gap-6 border-r px-4 py-5 lg:max-w-[260px]
+		min-[800px]:sticky min-[800px]:top-0 min-[800px]:h-screen min-[800px]:self-start min-[800px]:overflow-y-auto"
 	>
 		<a href={resolve('/')} class="flex items-center gap-2.5 px-2 py-1 no-underline">
 			<span aria-hidden="true" class="logo-mark size-7 shrink-0"></span>

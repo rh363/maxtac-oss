@@ -15,6 +15,7 @@ gitlab:
   # (se l'IdP è GitLab stesso) per il login della dashboard. Va montato nei container
   # orchestrator e web (vedi docker-compose.yml). Il sandbox non lo riceve.
   # ca_bundle: /etc/autofix/gitlab-ca.pem
+  # timeout_s: 30                 # timeout delle chiamate API di GitLab
 
 schedule:
   timezone: Europe/Rome

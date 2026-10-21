@@ -7,6 +7,15 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Client GitLab con timeout (`gitlab.timeout_s`, default 30 s): una GitLab irraggiungibile dai
+  container lasciava `tokens` e la run appesi per sempre.
+- Dashboard: la sidebar resta ferma mentre la pagina scorre (prima su pagine lunghe restava
+  visibile solo il riquadro della prossima run).
+- Documentazione del deploy: i file in `secrets/` devono essere dell'utente 1000; MTU delle
+  reti Docker su VM con interfaccia a 1450.
+
 ### Added
 
 - CLI: riga di chiusura facoltativa dopo `run`, definita dal lessico dell'operatore

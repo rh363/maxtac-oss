@@ -35,6 +35,7 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")' > secrets/
 | `url` | | solo `https://` |
 | `tokens` | nessuno | elenco dei token, vedi sotto |
 | `ca_bundle` | nessuno | bundle PEM della CA interna, per API, git e login OIDC verso GitLab. Va montato nei container `orchestrator` e `web` (righe commentate in `docker-compose.yml`) |
+| `timeout_s` | `30` | timeout in secondi delle chiamate API di GitLab |
 
 #### `gitlab.tokens`
 

@@ -50,6 +50,7 @@ mkdir -p secrets && chmod 700 secrets
 printf '%s' "$ANTHROPIC_KEY" > secrets/anthropic_api_key
 mkdir -p secrets/gitlab_tokens
 printf '%s' "$GITLAB_TOKEN_TEAM" > secrets/gitlab_tokens/team   # uno per voce di gitlab.tokens
+chown -R 1000:1000 secrets && chmod -R go= secrets          # i container girano come 1000:1000
 cp config.example.yaml config.yaml
 echo "DOCKER_GID=$(stat -c %g /var/run/docker.sock)" > .env
 echo "AUTOFIX_TAG=main" >> .env

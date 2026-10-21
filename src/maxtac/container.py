@@ -93,7 +93,10 @@ class Container:
 
         g = self.config.gitlab
         return gitlab.Gitlab(
-            g.url, private_token=token, ssl_verify=str(g.ca_bundle) if g.ca_bundle else True
+            g.url,
+            private_token=token,
+            ssl_verify=str(g.ca_bundle) if g.ca_bundle else True,
+            timeout=g.timeout_s,
         )
 
     def _token_value(self, name: str) -> str:

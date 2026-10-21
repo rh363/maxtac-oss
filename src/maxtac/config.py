@@ -64,6 +64,8 @@ class GitLabConf(_Model):
     # CA interna per un GitLab self-hosted con certificato non pubblico: usata da API, git e
     # login OIDC della dashboard. Il sandbox non la riceve (e non raggiunge GitLab).
     ca_bundle: Path | None = None
+    # Timeout delle chiamate API: senza, una GitLab irraggiungibile blocca la run per sempre
+    timeout_s: float = Field(default=30.0, gt=0)
 
     @model_validator(mode="after")
     def _check_tokens(self) -> Self:
