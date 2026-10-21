@@ -9,6 +9,8 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+- CLI: riga di chiusura facoltativa dopo `run`, definita dal lessico dell'operatore
+  (`quiet_night`, `clean_sweep`); il lessico neutro non ne ha e il report su disco non cambia.
 - CI con GitHub Actions (`ci.yml`): test e lint Python e frontend, Playwright, build delle tre
   immagini senza push e prova senza rete con rootfs in sola lettura (`scripts/smoke-images.sh`).
 - Pubblicazione su GHCR (`release.yml`) dopo il CI verde: `autofix-orchestrator`,
@@ -31,37 +33,6 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
   da ogni repo e proposta nella pagina Repository e in `autofix repos list/show`.
 - `autofix schedule` (lo scheduler; il vecchio nome resta accettato ma non è più documentato).
 
-### Changed
-
-- Il compose usa le immagini di GHCR (`AUTOFIX_TAG`, oppure `AUTOFIX_*_IMAGE` per digest) e
-  tiene `build:` per la build locale; profilo `sandbox` al posto di `build` per l'immagine dei
-  sandbox, che l'orchestrator riceve in `AUTOFIX_SANDBOX_IMAGE`. Default di `sandbox.image`:
-  `ghcr.io/rh363/autofix-sandbox:main`.
-- README: il passo "Costruisci e avvia" diventa "Scarica e avvia" (login a GHCR, `.env`,
-  `update.sh`); la build locale resta come alternativa.
-
-### Fixed
-
-- `sandbox/Dockerfile`: ruleset semgrep scaricati con retry, User-Agent e controllo del
-  contenuto (`sandbox/fetch-semgrep-rules.py`); link `pysemgrep` solo se esiste; errore
-  esplicito se il database OSV offline resta vuoto.
-
-### Changed
-
-- Un repo del `config.yaml` non coperto da nessun token blocca l'avvio; uno approvato viene
-  saltato con il motivo nel report e `repos approve` lo rifiuta. Un token non valido ferma solo
-  i repo che copre.
-- `bot_username`, `bot_name` e `bot_email` valgono solo senza `tokens` (configurazione a
-  token unico, ancora supportata).
-- `scripts/pin-digests.sh` pinna anche le immagini di `Dockerfile.web`.
-
-- Documentazione riorganizzata: il README spiega come si installa e come si usa (requisiti,
-  token GitLab senza admin, Application OIDC, primo utilizzo, uso quotidiano, costi,
-  manutenzione, problemi comuni); i contenuti tecnici sono in `docs/` (`architecture.md`,
-  `security.md`, `configuration.md`, `development.md`, `go-live.md`).
-- Le immagini Docker, l'healthcheck e i messaggi della CLI usano il comando `autofix`.
-
-### Added
 
 - Fase 6b, dashboard: pagina Repository (repo attivi con origine, comandi, rotazione del bug
   hunting, finding per stato e MR aperte; proposte dell'autodiscovery con baseline, sospetti,
@@ -80,6 +51,28 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
   proposte in attesa (una sospetta), sostituite e rifiutate.
 
 ### Changed
+
+- Il compose usa le immagini di GHCR (`AUTOFIX_TAG`, oppure `AUTOFIX_*_IMAGE` per digest) e
+  tiene `build:` per la build locale; profilo `sandbox` al posto di `build` per l'immagine dei
+  sandbox, che l'orchestrator riceve in `AUTOFIX_SANDBOX_IMAGE`. Default di `sandbox.image`:
+  `ghcr.io/rh363/autofix-sandbox:main`.
+- README: il passo "Costruisci e avvia" diventa "Scarica e avvia" (login a GHCR, `.env`,
+  `update.sh`); la build locale resta come alternativa.
+
+
+- Un repo del `config.yaml` non coperto da nessun token blocca l'avvio; uno approvato viene
+  saltato con il motivo nel report e `repos approve` lo rifiuta. Un token non valido ferma solo
+  i repo che copre.
+- `bot_username`, `bot_name` e `bot_email` valgono solo senza `tokens` (configurazione a
+  token unico, ancora supportata).
+- `scripts/pin-digests.sh` pinna anche le immagini di `Dockerfile.web`.
+
+- Documentazione riorganizzata: il README spiega come si installa e come si usa (requisiti,
+  token GitLab senza admin, Application OIDC, primo utilizzo, uso quotidiano, costi,
+  manutenzione, problemi comuni); i contenuti tecnici sono in `docs/` (`architecture.md`,
+  `security.md`, `configuration.md`, `development.md`, `go-live.md`).
+- Le immagini Docker, l'healthcheck e i messaggi della CLI usano il comando `autofix`.
+
 
 - E2E: ogni progetto Playwright esegue solo i test che lo riguardano (prima 6 test su 10
   risultavano saltati per scelta del progetto o per gli screenshot); screenshot come progetti
@@ -172,8 +165,30 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
   porta solo su loopback dietro reverse proxy.
 - Il report di ogni fix conserva motivo del triage e output dei test della verifica.
 
-### Security
 
+
+- `repos` in `config.yaml` può essere vuoto. `config.example.yaml` usa solo domini d'esempio
+  (lo verifica un test).
+- Tema dell'operatore attenuato come da mockup approvato: etichette funzionali chiare in
+  CLI e dashboard, il tema resta in marchio, sottotitoli secondari, colori e font; la valuta è
+  sempre `$`. Lessico con override `ui` per le etichette della dashboard.
+
+- Il db SQLite usa il journal `DELETE` invece di WAL, così la dashboard può leggerlo da un
+  mount in sola lettura.
+- Lo store dei finding è per repo (chiave progetto + fingerprint): prima la stessa CVE in due
+  repo condivideva lo stato, e un finding ignorato in un repo veniva soppresso anche negli altri.
+- La spesa dei task è registrata con scope `fix:<repo>:<task>`, distinto tra repo.
+
+- Una chiamata servita da un modello senza prezzo in config (fallback lato server) si conta al
+  prezzo più alto noto invece di fallire dopo aver già speso.
+
+### Fixed
+
+- `sandbox/Dockerfile`: ruleset semgrep scaricati con retry, User-Agent e controllo del
+  contenuto (`sandbox/fetch-semgrep-rules.py`); link `pysemgrep` solo se esiste; errore
+  esplicito se il database OSV offline resta vuoto.
+
+### Security
 
 - Un test verifica che l'allowlist del proxy dei sandbox contenga solo i registry dei
   pacchetti e mai l'host di GitLab.
@@ -199,23 +214,5 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
   del mese esauriti e tetto della notte ridotto ai crediti rimasti.
 - Scanner Python installati con hash (`scripts/lock-sandbox-tools.sh`) e script per pinnare i
   digest delle immagini (`scripts/pin-digests.sh`).
-
-### Changed
-
-
-- `repos` in `config.yaml` può essere vuoto. `config.example.yaml` usa solo domini d'esempio
-  (lo verifica un test).
-- Tema dell'operatore attenuato come da mockup approvato: etichette funzionali chiare in
-  CLI e dashboard, il tema resta in marchio, sottotitoli secondari, colori e font; la valuta è
-  sempre `$`. Lessico con override `ui` per le etichette della dashboard.
-
-- Il db SQLite usa il journal `DELETE` invece di WAL, così la dashboard può leggerlo da un
-  mount in sola lettura.
-- Lo store dei finding è per repo (chiave progetto + fingerprint): prima la stessa CVE in due
-  repo condivideva lo stato, e un finding ignorato in un repo veniva soppresso anche negli altri.
-- La spesa dei task è registrata con scope `fix:<repo>:<task>`, distinto tra repo.
-
-- Una chiamata servita da un modello senza prezzo in config (fallback lato server) si conta al
-  prezzo più alto noto invece di fallire dopo aver già speso.
 
 [Unreleased]: https://github.com/rh363/maxtac-oss/commits/main

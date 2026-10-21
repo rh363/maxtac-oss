@@ -30,7 +30,7 @@ WORKDIR = "/work"
 HOME = "/home/sandbox"
 OUTPUT_LIMIT = 8_000_000  # byte di output tenuti per comando (testa e coda)
 READ_LIMIT = 2_000_000
-KILL_GRACE = 10
+KILL_GRACE = 10  # poi flatline: il watchdog non tratta
 # Watchdog: oltre timeout + grazia + margine il container viene ucciso. Serve quando un
 # processo in background (es. `setsid sleep inf &`) sfugge a `timeout` e tiene aperto stdout.
 WATCHDOG_SLACK = 30.0

@@ -9,7 +9,7 @@ from maxtac import cli
 from maxtac.domain.models import Decision, FixResult, Outcome, RepoReport, RunReport, Verdict
 from maxtac.domain.policy import branch_name, group_into_tasks
 from maxtac.presentation.lexicon import CYBERPUNK, NEUTRAL, lexicon
-from maxtac.presentation.report import render_run
+from maxtac.presentation.report import render_run, signoff
 from maxtac.services.merge_request import commit_message, mr_body, mr_title
 
 from .fakes import requests_cve
@@ -150,3 +150,34 @@ def test_write_report_neutral_with_diffs(tmp_path):
     assert (
         tmp_path / "night-1" / "diffs" / "alex__ecs2" / "autofix__cve__abc.diff"
     ).read_text() == "+x"
+
+
+def _night(*repos: RepoReport) -> RunReport:
+    return RunReport("20771010T023000Z", dry_run=False, repos=list(repos), night_cap_usd=3.0)
+
+
+def test_signoff_only_in_operator_theme():
+    quiet = _night(RepoReport("arasaka/relic", findings_total=4), RepoReport("militech/crusher"))
+    assert signoff(quiet, NEUTRAL) is None
+    assert signoff(quiet, CYBERPUNK) == CYBERPUNK.quiet_night
+
+    task = TASK
+    fixed = RepoReport("kangtao/smart-gun", findings_total=1, findings_new=1)
+    fixed.fixes.append(
+        FixResult(task, Outcome.MR_OPENED, 0.4, mr_url="https://gitlab.example.it/mr/1")
+    )
+    assert signoff(_night(fixed), CYBERPUNK) == CYBERPUNK.clean_sweep.format(n=1)
+    assert signoff(_night(fixed), NEUTRAL) is None
+
+
+def test_signoff_stays_silent_when_something_went_wrong():
+    broken = RepoReport("biotechnica/flats", errors=["scanner osv-scanner: timeout"])
+    assert signoff(_night(broken), CYBERPUNK) is None
+
+    task = TASK
+    mixed = RepoReport("petrochem/grid", findings_new=2)
+    mixed.fixes += [
+        FixResult(task, Outcome.MR_OPENED, 0.4, mr_url="https://gitlab.example.it/mr/2"),
+        FixResult(task, Outcome.VERIFY_FAILED, 0.6),
+    ]
+    assert signoff(_night(mixed), CYBERPUNK) is None

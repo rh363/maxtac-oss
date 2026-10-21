@@ -30,6 +30,9 @@ class Lexicon:
     mr_open: str
     outcomes: dict[Outcome, str]
     ui: dict[str, str] = field(default_factory=dict)  # override delle etichette web
+    # Chiusura a schermo di una run (mai nel report su disco). Vuote: nessun messaggio.
+    quiet_night: str = ""  # nessun finding nuovo e nessun errore
+    clean_sweep: str = ""  # MR aperte e nessun fix fallito; {n} = numero di MR
 
     def money(self, usd: float) -> str:
         return f"{self.currency}{usd:.2f}"
@@ -110,6 +113,8 @@ CYBERPUNK = Lexicon(
         "tag.repos": "distretti sotto controllo",
         "tag.proposals": "nuove soffiate",
         "empty.proposals": "Nessuna proposta. Nessuna soffiata in arrivo.",
+        "empty.repos": "Nessun repository configurato. Il distretto è tranquillo.",
+        "diff.empty": "Nessun diff registrato. Braindance vuota.",
         "status.needs_human": "Serve un umano",
         "outcome.needs_human": "Serve un umano",
         "outcome.dry_run": "Dry run",
@@ -120,6 +125,8 @@ CYBERPUNK = Lexicon(
         "empty.runs": "Nessuna run ancora. Night City dorme, per ora.",
         "empty.findings": "Nessun finding con questi filtri. Strade pulite.",
     },
+    quiet_night="Notte tranquilla. Wake up, choom: niente da segnalare.",
+    clean_sweep="Lavoro preem: {n} MR ti aspettano su GitLab.",
 )
 
 LEXICONS = {lx.name: lx for lx in (NEUTRAL, CYBERPUNK)}
