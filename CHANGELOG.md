@@ -9,6 +9,9 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Fixed
 
+- Proxy dei sandbox: squid andava in crash all'avvio (non può riaprire `/dev/stdout` come
+  utente `proxy`), quindi i sandbox non raggiungevano nessun registry. Ora logga su file, che
+  l'immagine porta su stdout; `scripts/smoke-proxy.sh` lo verifica in CI.
 - Client GitLab con timeout (`gitlab.timeout_s`, default 30 s): una GitLab irraggiungibile dai
   container lasciava `tokens` e la run appesi per sempre.
 - Dashboard: la sidebar resta ferma mentre la pagina scorre (prima su pagine lunghe restava
