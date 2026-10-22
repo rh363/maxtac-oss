@@ -89,7 +89,10 @@ def _environment(spec: SandboxSpec) -> dict[str, str]:
 
 def run_kwargs(spec: SandboxSpec, worktree: Path) -> dict[str, Any]:
     """Parametri di `containers.run`: qui sta tutto l'hardening, testato a parte."""
-    tmpfs_opts = "rw,nosuid,nodev,mode=1777"
+    # `exec` esplicito: senza, Docker monta i tmpfs noexec e go test (binari in /tmp) o le
+    # estensioni C installate nella home non girano. Il sandbox esegue comunque i comandi del
+    # repo: noexec non toglierebbe nulla a chi lo controlla.
+    tmpfs_opts = "rw,exec,nosuid,nodev,mode=1777"
     return {
         "image": spec.image,
         "command": ["sleep", "infinity"],

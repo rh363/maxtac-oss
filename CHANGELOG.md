@@ -9,6 +9,9 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Fixed
 
+- Sandbox: `/tmp` e la home erano montati `noexec` (default di Docker per i tmpfs), quindi
+  `go test` non poteva eseguire i binari compilati e le estensioni C installate da pip non si
+  caricavano. Ora i tmpfs hanno `exec`; `smoke-images.sh` esegue un `go test`.
 - Proxy dei sandbox: squid andava in crash all'avvio (non può riaprire `/dev/stdout` come
   utente `proxy`), quindi i sandbox non raggiungevano nessun registry. Ora logga su file, che
   l'immagine porta su stdout; `scripts/smoke-proxy.sh` lo verifica in CI.

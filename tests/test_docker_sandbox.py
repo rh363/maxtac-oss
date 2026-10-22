@@ -108,6 +108,10 @@ def test_hardening_parameters(tmp_path: Path, monkeypatch: Any) -> None:
     assert kw["network"] == "autofix_sandbox"
     assert kw["volumes"] == {str(tmp_path): {"bind": "/work", "mode": "rw"}}
     assert set(kw["tmpfs"]) == {"/tmp", "/home/sandbox"}
+    # Docker monta i tmpfs noexec se non si chiede `exec`: go test e le estensioni C dei
+    # pacchetti pip installati nella home non potrebbero girare
+    for opts in kw["tmpfs"].values():
+        assert "exec" in opts.split(",") and "nosuid" in opts.split(",")
     assert kw["pids_limit"] == 512 and kw["mem_limit"] == kw["memswap_limit"] == "4g"
     assert kw["nano_cpus"] == 2_000_000_000
     env = kw["environment"]
