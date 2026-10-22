@@ -24,6 +24,11 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+- Registry interni: allowlist locale del proxy in `proxy/local/extra-registries.txt` (fuori da
+  git) e credenziali di sola lettura `sandbox.registry_credentials`, scritte nel `~/.netrc` di
+  ogni sandbox. I valori sono oscurati nell'output del sandbox, in MR, commit, report e
+  webhook; un fix che li contiene non viene pubblicato. Allowlist e credenziali non possono
+  coprire GitLab (config, avvio dei sandbox e `status`).
 - CLI: riga di chiusura facoltativa dopo `run`, definita dal lessico dell'operatore
   (`quiet_night`, `clean_sweep`); il lessico neutro non ne ha e il report su disco non cambia.
 - CI con GitHub Actions (`ci.yml`): test e lint Python e frontend, Playwright, build delle tre

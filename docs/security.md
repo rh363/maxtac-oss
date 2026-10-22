@@ -9,6 +9,7 @@ che produce il modello che lo ha letto.
 | Rischio | Contromisura |
 | --- | --- |
 | Esfiltrazione di chiave API o token GitLab | Solo nell'orchestrator (Docker secret); mai nel sandbox, in argv, nell'URL del remoto o nei log |
+| Credenziali dei registry interni | Solo account di sola lettura; nel sandbox come `~/.netrc` passato su stdin (mai in env o argv). L'output del sandbox arriva a modello, report e dashboard con i valori oscurati (password, `utente:password`, base64); MR e commit sono oscurati e un fix il cui diff contiene un valore non viene pubblicato. Nessuna credenziale e nessuna voce di allowlist può coprire GitLab (controllo in config e all'avvio dei sandbox) |
 | Un token usato fuori dal suo perimetro | Con più token ogni repo usa solo quello col prefisso di path più specifico che lo copre, scelto dalla config e mai dal contenuto del repo; un repo non coperto non arriva a GitLab. Token, client API e header git sono separati per token. La dashboard e `status` vedono solo nome, scope, utente e scadenza, mai i valori |
 | Code execution nell'orchestrator via git | Git dir separata e non montata, `.git` (file o directory) nella working tree eliminato prima di ogni comando, hooks/fsmonitor/filtri/protocolli non https disattivati, config globale ignorata |
 | Quick action GitLab (`/merge`, `/approve`) e menzioni nella MR | Campi non fidati su una riga con `\|` e backtick neutralizzati; motivazioni, riassunto e output dei test in blocchi di codice; nessuna riga della descrizione può iniziare con `/`; `@` neutralizzato |
@@ -35,6 +36,11 @@ Accettati e da rivalutare:
   credenziali *proprie* potrebbe pubblicare su PyPI o npm e così esfiltrare codice. La
   mitigazione è un mirror in sola lettura (devpi, verdaccio, Athens per Go) con l'allowlist
   ridotta ai soli mirror.
+- **Credenziali dei registry nel sandbox.** Il codice del repo gira accanto a `~/.netrc` e può
+  leggerle o inviarle a un registry dell'allowlist. L'oscuramento copre i valori in chiaro, non
+  una trasformazione scelta da chi controlla il codice (es. il file cifrato o spezzato), che
+  potrebbe arrivare al modello o in un diff. Per questo vanno usati solo account di sola
+  lettura, dedicati ad Autofix e senza altri permessi.
 - **Kernel condiviso.** Il sandbox gira con lo stesso uid dei file dell'orchestrator: un escape
   dal kernel darebbe accesso al db. Raccomandato: `userns-remap` nel daemon Docker oppure il
   runtime gVisor (`runsc`), su una VM dedicata solo ad Autofix.

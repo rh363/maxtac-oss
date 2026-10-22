@@ -24,6 +24,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Token GitLab: un file per token di gitlab.tokens (secrets/gitlab_tokens/<nome>)
       - ./secrets/gitlab_tokens:/run/secrets/gitlab_tokens:ro
+      # Registry interni: credenziali di sola lettura (utente:password) per il ~/.netrc dei
+      # sandbox, una per voce di sandbox.registry_credentials. Mai nel servizio web.
+      - ./secrets/registry_credentials:/run/secrets/registry_credentials:ro
+      # Allowlist locale del proxy: letta solo per controllare che non copra GitLab
+      - ./proxy/local:/etc/autofix/proxy-local:ro
       # GitLab interno con CA privata: decommenta e imposta gitlab.ca_bundle in config.yaml
       # - ./ca/gitlab-ca.pem:/etc/autofix/gitlab-ca.pem:ro
     networks: [egress]
@@ -41,7 +46,9 @@ services:
   proxy:
     image: ubuntu/squid:6.6-24.04_beta
     restart: unless-stopped
-    volumes: [./proxy/squid.conf:/etc/squid/squid.conf:ro]
+    volumes:
+      - ./proxy/squid.conf:/etc/squid/squid.conf:ro
+      - ./proxy/local:/etc/squid/local:ro   # extra-registries.txt: registry interni, fuori da git
     networks: [egress, sandbox]
     healthcheck:
       test: ["CMD", "squid", "-k", "check"]

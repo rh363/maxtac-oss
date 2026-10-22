@@ -103,6 +103,12 @@ sandbox:
   mem_limit: 4g
   cpus: 2.0
   pids_limit: 512
+  # Registry interni con login: credenziali di SOLA LETTURA scritte nel ~/.netrc dei sandbox.
+  # Il valore utente:password va in secrets/registry_credentials/<secret>. Gli host dei
+  # registry interni vanno anche in proxy/local/extra-registries.txt. Mai GitLab.
+  # registry_credentials:
+  #   - host: pypi.example.it
+  #     secret: pypi
 
 scanners:
   semgrep:

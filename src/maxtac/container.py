@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from maxtac.adapters.anthropic_llm import AnthropicLLM
-from maxtac.adapters.docker_sandbox import DockerSandbox, SandboxSpec
+from maxtac.adapters.docker_sandbox import DockerSandbox, SandboxSpec, netrc_text
 from maxtac.adapters.gitlab_vcs import GitLabRouter, GitLabVCS, TokenUnavailable, introspect_token
 from maxtac.adapters.notifier import NoopNotifier, WebhookNotifier
 from maxtac.adapters.scanners import build_scanners
@@ -24,12 +24,21 @@ from maxtac.adapters.sqlite_store import (
     SqliteTokenRegistry,
     connect,
 )
-from maxtac.config import SECRETS_DIR, AppConfig, Secrets, load_secrets, read_token_secret
+from maxtac.config import (
+    SECRETS_DIR,
+    AppConfig,
+    Secrets,
+    load_secrets,
+    read_extra_registries,
+    read_registry_credential,
+    read_token_secret,
+)
 from maxtac.domain.models import RepoConfig
-from maxtac.domain.policy import merge_repos, resolve_token
-from maxtac.domain.ports import NotifierPort, ScannerPort
+from maxtac.domain.policy import Redactor, merge_repos, registry_conflicts, resolve_token
+from maxtac.domain.ports import NotifierPort, SandboxPort, ScannerPort
 from maxtac.services.discovery import Discovery, DiscoverySettings
 from maxtac.services.pipeline import Pipeline
+from maxtac.services.redaction import RedactingSandboxes
 from maxtac.services.scan import ScanService
 
 log = logging.getLogger(__name__)
@@ -37,6 +46,10 @@ log = logging.getLogger(__name__)
 
 class MissingSecret(RuntimeError):
     pass
+
+
+class RegistryConflict(RuntimeError):
+    """L'allowlist locale del proxy lascerebbe il sandbox raggiungere GitLab."""
 
 
 def utcnow() -> datetime:
@@ -155,12 +168,38 @@ class Container:
         self.tokens.save_tokens(infos)
         return GitLabRouter(g.token_scopes(), backends)
 
-    def sandboxes(self) -> DockerSandbox:
+    def extra_registries(self) -> tuple[list[str], list[str]]:
+        """Registry interni dell'allowlist del proxy e quelli che coprirebbero GitLab."""
+        extra = read_extra_registries(self.config.sandbox.extra_registries_file)
+        return extra, registry_conflicts(extra, self.config.gitlab.host)
+
+    def registry_credentials(self) -> list[tuple[str, str, str]]:
+        """(host, utente, password) per il ~/.netrc dei sandbox."""
+        out = []
+        for c in self.config.sandbox.registry_credentials:
+            try:
+                user, password = read_registry_credential(c.secret, self.secrets_dir)
+            except (OSError, ValueError) as e:
+                raise MissingSecret(f"registry {c.host}: {e}") from None
+            out.append((c.host, user, password))
+        return out
+
+    def redactor(self) -> Redactor:
+        return Redactor.for_credentials((u, p) for _, u, p in self.registry_credentials())
+
+    def sandboxes(self) -> SandboxPort:
+        _, conflicts = self.extra_registries()
+        if conflicts:
+            raise RegistryConflict(
+                f"{self.config.sandbox.extra_registries_file}: {conflicts} coprono "
+                f"{self.config.gitlab.host}: il sandbox non deve mai raggiungere GitLab"
+            )
+        creds = self.registry_credentials()
         s = self.config.sandbox
         # Con il compose l'immagine arriva da AUTOFIX_SANDBOX_IMAGE (tag o digest pubblicato),
         # la stessa che `docker compose --profile sandbox pull` scarica.
         image = os.environ.get("AUTOFIX_SANDBOX_IMAGE") or s.image
-        return DockerSandbox(
+        sandbox = DockerSandbox(
             SandboxSpec(
                 image=image,
                 network=s.network,
@@ -171,8 +210,12 @@ class Container:
                 pids_limit=s.pids_limit,
                 tmp_size=s.tmp_size,
                 home_size=s.home_size,
+                netrc=netrc_text(creds),
             )
         )
+        if not creds:
+            return sandbox
+        return RedactingSandboxes(sandbox, Redactor.for_credentials((u, p) for _, u, p in creds))
 
     def scanners(self) -> list[ScannerPort]:
         langs = {lang for r in self.repos() for lang in r.languages}
@@ -232,6 +275,7 @@ class Container:
             clock=self.clock,
             runs=self.runs,
             notifier=notifier,
+            redactor=self.redactor(),
         )
 
     def discovery(self, *, use_llm: bool) -> Discovery:

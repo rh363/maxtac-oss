@@ -214,3 +214,21 @@ def test_real_docker_roundtrip(tmp_path: Path) -> None:
         r = s.exec("id -u; touch /etc/x", timeout=10)
         assert r.code != 0 and str(os.getuid()) in r.output
     assert (tmp_path / "a" / "b.txt").read_text() == "ciao\n"
+
+
+@pytest.mark.docker
+@pytest.mark.skipif(not _docker_ready(), reason="serve Docker e AUTOFIX_DOCKER_TESTS=1")
+def test_real_docker_netrc_in_tmpfs_home(tmp_path: Path) -> None:
+    """Con il rootfs in sola lettura put_archive è rifiutato: ~/.netrc arriva su stdin."""
+    spec = SandboxSpec(
+        image=os.environ.get("AUTOFIX_DOCKER_TEST_IMAGE", "python:3.13-slim"),
+        network="bridge",
+        user=f"{os.getuid()}:{os.getgid()}",
+        netrc="machine pypi.example.it login u password pw\n",
+    )
+    with DockerSandbox(spec).open(tmp_path) as s:
+        r = s.exec('stat -c %a "$HOME/.netrc"; cat "$HOME/.netrc"; env', timeout=10)
+    assert r.code == 0, r.output
+    lines = r.output.splitlines()
+    assert lines[0] == "600" and lines[1] == "machine pypi.example.it login u password pw"
+    assert not any("pw" in line for line in lines[2:]), "mai nell'ambiente"

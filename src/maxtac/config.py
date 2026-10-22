@@ -14,7 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from maxtac.domain.budget import ModelPrice, Pricing
 from maxtac.domain.models import Language, RepoConfig
-from maxtac.domain.policy import resolve_token
+from maxtac.domain.policy import registry_conflicts, resolve_token
 from maxtac.services.pipeline import Limits, Models, PipelineSettings
 
 ThemeName = Literal["neutral", "cyberpunk"]
@@ -111,6 +111,18 @@ class GitLabConf(_Model):
         return f"{self.bot_username}@noreply.{self.host}" if self.bot_username else None
 
 
+HOST_RE = r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+
+
+class RegistryCredentialConf(_Model):
+    """Credenziale di sola lettura per un registry interno (PyPI, npm...), scritta nel
+    ~/.netrc di ogni sandbox. Il valore `utente:password` sta in
+    /run/secrets/registry_credentials/<secret>. Mai credenziali verso GitLab."""
+
+    host: str = Field(pattern=HOST_RE)
+    secret: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]*$")
+
+
 class SandboxConf(_Model):
     image: str = "ghcr.io/rh363/autofix-sandbox:main"  # sovrascritta da AUTOFIX_SANDBOX_IMAGE
     network: str = "autofix_sandbox"
@@ -121,6 +133,10 @@ class SandboxConf(_Model):
     pids_limit: int = Field(default=512, ge=64)
     tmp_size: str = Field(default="1g", pattern=r"^\d+[kmg]$")
     home_size: str = Field(default="4g", pattern=r"^\d+[kmg]$")
+    registry_credentials: list[RegistryCredentialConf] = Field(default_factory=list)
+    # Registry interni aggiunti all'allowlist del proxy, uno per riga: file locale della VM
+    # (proxy/local/extra-registries.txt), letto qui solo per controllare che non copra GitLab.
+    extra_registries_file: Path = Path("/etc/autofix/proxy-local/extra-registries.txt")
 
 
 def _default_semgrep_by_language() -> dict[str, list[str]]:
@@ -341,6 +357,15 @@ class AppConfig(_Model):
         uncovered = [r.project for r in self.repos if resolve_token(r.project, scopes) is None]
         if uncovered:
             raise ValueError(f"repo non coperti da nessun token in gitlab.tokens: {uncovered}")
+        hosts = [c.host for c in self.sandbox.registry_credentials]
+        if len(hosts) != len(set(hosts)):
+            raise ValueError("sandbox.registry_credentials: host duplicati")
+        bad = registry_conflicts(hosts, self.gitlab.host)
+        if bad:
+            raise ValueError(
+                "sandbox.registry_credentials: il sandbox non riceve mai credenziali "
+                f"per GitLab {bad}"
+            )
         if self.budget.per_task_usd > self.budget.per_night_usd:
             raise ValueError("per_task_usd non può superare per_night_usd")
         return self
@@ -437,6 +462,35 @@ def read_token_secret(
     env = os.environ if environ is None else environ
     value = env.get(f"GITLAB_TOKEN_{name}".upper().replace("-", "_"), "").strip()
     return value or None
+
+
+REGISTRY_CREDENTIALS_DIR = "registry_credentials"
+
+
+def read_registry_credential(secret: str, secrets_dir: Path = SECRETS_DIR) -> tuple[str, str]:
+    """`utente:password` da /run/secrets/registry_credentials/<secret>. Niente spazi né
+    virgolette: il valore finisce in un ~/.netrc."""
+    path = secrets_dir / REGISTRY_CREDENTIALS_DIR / secret
+    if not path.is_file():
+        raise FileNotFoundError(f"credenziale mancante: {path}")
+    user, sep, password = path.read_text(encoding="utf-8").strip().partition(":")
+    if not sep or not user or not password:
+        raise ValueError(f"{path}: il formato è utente:password")
+    if any(c.isspace() or c in "\"'\\" for c in user + password):
+        raise ValueError(f"{path}: utente e password senza spazi né virgolette")
+    return user, password
+
+
+def read_extra_registries(path: Path) -> list[str]:
+    """Registry interni dell'allowlist del proxy: uno per riga, `#` per i commenti."""
+    if not path.is_file():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        entry = line.split("#", 1)[0].strip()
+        if entry:
+            out.append(entry)
+    return out
 
 
 def load_secrets(secrets_dir: Path = SECRETS_DIR) -> Secrets:

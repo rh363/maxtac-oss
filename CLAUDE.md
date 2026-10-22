@@ -10,7 +10,8 @@ ci si ferma e si riassume.
 
 - Architettura esagonale: `src/maxtac/domain/` non importa gitlab, docker o anthropic.
 - La chiave Anthropic resta solo nell'orchestrator; il sandbox esegue solo comandi e non riceve
-  né la chiave né il token GitLab.
+  né la chiave né il token GitLab. Può ricevere solo credenziali di sola lettura dei registry
+  interni (`~/.netrc`, su stdin), oscurate da `services/redaction.py` in tutto ciò che esce.
 - Loop agentico proprio sulla Messages API (non Agent SDK), tool eseguiti nel sandbox via
   docker exec. Il loop vive in `services/ripperdoc.py`, l'adapter fa un passo alla volta.
 - Git dir separata dalla working tree, hooks e fsmonitor disattivati: ogni comando git passa
@@ -33,7 +34,9 @@ ci si ferma e si riassume.
   dell'autodiscovery (`repo_proposals`) sono non fidate: niente le promuove in automatico, la
   dashboard le legge e basta, e il tool `write_file` non è offerto al loop di discovery.
 - Il sandbox non deve mai raggiungere GitLab: l'allowlist di `proxy/squid.conf` contiene solo
-  i registry dei pacchetti (`tests/test_proxy_allowlist.py`).
+  i registry dei pacchetti (`tests/test_proxy_allowlist.py`); i registry interni stanno nel
+  file locale `proxy/local/extra-registries.txt`, e `policy.registry_conflicts` blocca i
+  sandbox se una voce (o una credenziale) copre l'host di GitLab.
 - `config.example.yaml` è pubblico: solo domini d'esempio, mai email o host reali.
 - **Tutto ciò che va su GitLab (branch, label, commit, testo MR) e i report su disco sono sempre
   neutri.** Il tema cyberpunk esiste solo in `presentation/` (e negli asset in

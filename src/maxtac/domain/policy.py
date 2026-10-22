@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import fnmatch
 import json
 import posixpath
@@ -9,6 +10,7 @@ import re
 import tomllib
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -412,3 +414,43 @@ def token_state(info: TokenInfo, today: date) -> TokenState:
     if days < 0:
         return "expired"
     return "expiring" if days <= TOKEN_EXPIRY_WARNING_DAYS else "ok"
+
+
+# --- registry interni del sandbox ---
+
+
+def registry_conflicts(domains: Iterable[str], gitlab_host: str) -> list[str]:
+    """Voci dell'allowlist del proxy che lascerebbero il sandbox raggiungere GitLab: l'host
+    stesso, un `.dominio` di squid o un dominio padre (per prudenza, anche senza punto)."""
+    host = gitlab_host.strip().lower().rsplit("@", 1)[-1].split(":", 1)[0].rstrip(".")
+    out = []
+    for d in domains:
+        bare = d.strip().lower().rstrip(".").lstrip(".")
+        if bare and (host == bare or host.endswith("." + bare)):
+            out.append(d)
+    return out
+
+
+@dataclass(frozen=True)
+class Redactor:
+    """Credenziali dei registry date al sandbox: non devono mai uscire verso GitLab, report o
+    webhook. Oscura password, `utente:password` e la sua forma base64 (header Basic)."""
+
+    secrets: tuple[str, ...] = ()
+
+    @classmethod
+    def for_credentials(cls, creds: Iterable[tuple[str, str]]) -> Redactor:
+        values: set[str] = set()
+        for user, password in creds:
+            pair = f"{user}:{password}"
+            values |= {password, pair, base64.b64encode(pair.encode()).decode()}
+        # le più lunghe prima: `utente:password` sparisce intero, non solo la password
+        return cls(tuple(sorted((v for v in values if v), key=len, reverse=True)))
+
+    def redact(self, text: str) -> str:
+        for s in self.secrets:
+            text = text.replace(s, "***")
+        return text
+
+    def leaks(self, text: str) -> bool:
+        return any(s in text for s in self.secrets)
