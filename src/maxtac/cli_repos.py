@@ -56,6 +56,11 @@ def add_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None
     a.add_argument(
         "--force", action="store_true", help="approva anche con baseline rossa o comandi sospetti"
     )
+    a.add_argument(
+        "--scan-only",
+        action="store_true",
+        help="solo scan: finding tracciati, nessun fix (setup e test non girano mai)",
+    )
 
 
 NO_TOKEN = "NESSUNO (aggiungilo a gitlab.tokens)"
@@ -170,11 +175,14 @@ def cmd_list(c: Container, args: argparse.Namespace) -> int:
     rows: list[tuple[str, str, str, str]] = []
     configured = {r.project for r in c.config.to_repos()}
     for r in c.config.to_repos():
-        rows.append((r.project, "config", ", ".join(r.languages), r.test_command))
+        src = "config, solo scan" if r.scan_only else "config"
+        rows.append((r.project, src, ", ".join(r.languages), r.test_command))
     for a in c.registry.approved_repos():
         src = (
             "approvato (ignorato: c'è nel config)" if a.repo.project in configured else "approvato"
         )
+        if a.repo.scan_only:
+            src += ", solo scan"
         rows.append((a.repo.project, src, ", ".join(a.repo.languages), a.repo.test_command))
     for p in c.registry.list_proposals(ProposalStatus.PENDING):
         flag = {True: "baseline verde", False: "baseline rossa", None: "senza baseline"}[
@@ -234,7 +242,9 @@ def cmd_approve(c: Container, args: argparse.Namespace, editor: Editor = _system
             file=sys.stderr,
         )
         return 1
-    problems = approval_blockers(p)
+    scan_only = bool(getattr(args, "scan_only", False))
+    # in solo scan setup e test non girano mai: baseline e comandi non contano
+    problems = [] if scan_only else approval_blockers(p)
     if problems and not args.force:
         print(f"{p.project}: non approvo senza --force:", file=sys.stderr)
         for line in problems:
@@ -245,9 +255,11 @@ def cmd_approve(c: Container, args: argparse.Namespace, editor: Editor = _system
         languages=p.languages,
         test_command=p.test_command,
         setup_command=p.setup_command,
+        scan_only=scan_only,
     )
     c.registry.approve(p, repo, _operator(), c.clock())
-    print(f"{p.project}: approvato, entra nella prossima run notturna")
+    mode = " (solo scan: nessun fix)" if scan_only else ""
+    print(f"{p.project}: approvato{mode}, entra nella prossima run notturna")
     return 0
 
 

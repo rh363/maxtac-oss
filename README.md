@@ -206,8 +206,18 @@ autofix repos reject team/api            # scarta la proposta
 autofix repos remove team/api            # toglie un repo approvato
 ```
 
-Se i test non passano o ci sono comandi sospetti, `approve` chiede anche `--force`. In
-alternativa puoi scrivere i repo a mano nella sezione `repos:` del `config.yaml`, che ha
+Se i test non passano o ci sono comandi sospetti, `approve` chiede anche `--force`.
+
+**Solo scan.** Per un repo i cui test non possono girare nell'ambiente isolato (per esempio
+perché dipende da pacchetti privati che non si possono scaricare), puoi approvarlo solo per la
+scansione: i problemi trovati restano visibili in `status` e nella dashboard, ma Autofix non
+prova a correggerli e non spende crediti per quel repo.
+
+```bash
+autofix repos approve team/api --scan-only
+```
+
+In alternativa puoi scrivere i repo a mano nella sezione `repos:` del `config.yaml`, che ha
 sempre la precedenza.
 
 ### Registry interni

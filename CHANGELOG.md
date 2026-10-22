@@ -27,6 +27,9 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 - Sandbox con Python 3.14 (`python3.14`, CPython standalone via uv in `/opt/python`) accanto
   al 3.13 di default, per i repo che richiedono Python 3.14. L'autodiscovery lo usa da sola
   quando `requires-python` (o Poetry) chiede 3.14, e i prompt di discovery e fix lo citano.
+- Repo in sola scansione (`scan_only` in `repos:` del config, `repos approve --scan-only`):
+  finding tracciati in `status` e dashboard, ma niente triage, fix né bug hunting. Per i repo
+  i cui test non possono girare nel sandbox.
 - Registry interni: allowlist locale del proxy in `proxy/local/extra-registries.txt` (fuori da
   git) e credenziali di sola lettura `sandbox.registry_credentials`, scritte nel `~/.netrc` di
   ogni sandbox. I valori sono oscurati nell'output del sandbox, in MR, commit, report e

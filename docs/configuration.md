@@ -215,6 +215,7 @@ repos:
   - project: team/agent
     languages: [go]
     test_command: go test ./...
+    scan_only: true   # solo scan: finding tracciati, nessun fix né bug hunting
 ```
 
 ### `prices_usd_per_mtok`

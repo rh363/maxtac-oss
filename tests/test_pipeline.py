@@ -506,3 +506,19 @@ def test_task_without_agent_has_no_iterations(world):
     w = world(turns=bump_turns(), limits=Limits(per_night_usd=0.000001))
     for fx in w.run().repos[0].fixes:
         assert fx.iterations is None and fx.agent_stop is None
+
+
+def test_scan_only_repo_tracks_findings_without_fixing_or_hunting(world):
+    """Repo che si può scansionare ma non verificare (dipendenze private irraggiungibili):
+    i finding restano tracciati, nessun triage, nessun fix, nessun bug hunting."""
+    scan_only = replace(repo(), scan_only=True)
+    w = world(turns=bump_turns(), repos=[scan_only], kinds=("cve", "bug"))
+    w.settings = replace(w.settings, hunting_repos_per_night=5)
+    w.pipeline.settings = w.settings
+    report = w.run()
+    [rr] = report.repos
+    assert rr.findings_total == 2 and rr.fixes == [] and not rr.hunted
+    assert all(w.status(f) is FindingStatus.NEW for f in cve_findings())
+    assert w.llm.structured_calls == [] and report.spent_usd == 0
+    assert len(w.sandboxes.opened) == 1  # solo lo scan
+    assert w.gl.pushed == [] and w.gl.mrs == []

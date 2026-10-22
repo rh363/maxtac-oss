@@ -136,3 +136,27 @@ def test_reject_and_remove(setup, capsys):
     assert main(setup, "approve", "team/new") == 0
     assert main(setup, "remove", "team/new") == 0
     assert main(setup, "remove", "team/new") == 1
+
+
+def test_approve_scan_only_needs_no_green_baseline(setup, capsys):
+    """Solo scan: setup e test non girano mai, quindi la baseline rossa non blocca."""
+    assert main(setup, "discover", "--project", "team/red") == 0
+    assert main(setup, "approve", "team/red", "--scan-only") == 0
+    assert "solo scan" in capsys.readouterr().out
+    c = Container.build(load_config(setup))
+    try:
+        [red] = [r for r in c.repos() if r.project == "team/red"]
+        assert red.scan_only
+    finally:
+        c.close()
+    assert main(setup, "list") == 0
+    assert "solo scan" in capsys.readouterr().out
+
+
+def test_scan_only_in_config(tmp_path):
+    data = yaml.safe_load(EXAMPLE.read_text())
+    data["repos"][0]["scan_only"] = True
+    p = tmp_path / "config.yaml"
+    p.write_text(yaml.safe_dump(data))
+    repos = load_config(p).to_repos()
+    assert repos[0].scan_only and not repos[1].scan_only
