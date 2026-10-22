@@ -368,3 +368,38 @@ def test_status_shows_extra_registries_and_flags_gitlab(tmp_path: Path, capsys: 
         assert "ATTENZIONE" in capsys.readouterr().out
     finally:
         c.close()
+
+
+def test_registries_note_lists_hosts_never_credentials() -> None:
+    from maxtac.services.ripperdoc import registries_note
+
+    assert registries_note([], []) == ""
+    note = registries_note(["npm.example.it", "pypi.example.it"], ["pypi.example.it"])
+    assert "npm.example.it, pypi.example.it" in note
+    assert "credentials for pypi.example.it are already in ~/.netrc" in note
+    assert "--extra-index-url" in note
+
+
+def test_agents_are_told_about_internal_registries(tmp_path: Path, night: Any) -> None:
+    from maxtac.services.ripperdoc import SYSTEM, Ripperdoc
+
+    from .fakes import ScriptedLLM, end_turn
+    from .test_ripperdoc import REPO, TASK, sandbox
+
+    extra = tmp_path / "extra-registries.txt"
+    extra.write_text("pypi.example.it\n")
+    c = container(
+        tmp_path,
+        extra_registries_file=str(extra),
+        registry_credentials=[{"host": "pypi.example.it", "secret": "pypi"}],
+    )
+    try:
+        note = c.registries_note()
+        assert "pypi.example.it" in note and PASSWORD not in note and USER not in note
+    finally:
+        c.close()
+    llm = ScriptedLLM([end_turn()])
+    Ripperdoc(llm, "claude-sonnet-5-5", registries_note=note).fix(
+        REPO, TASK, sandbox(), night.meter("fix", 0.8)
+    )
+    assert llm.systems == [SYSTEM + note]

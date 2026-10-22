@@ -160,6 +160,7 @@ def make(world, conn, budget_port, clock, tmp_path, llm=None, handler=None, **se
             max_iterations=settings.pop("max_iterations", 6),
             workdir=tmp_path / "work",
             monthly_credits_usd=settings.pop("monthly_credits_usd", 100.0),
+            registries_note=settings.pop("registries_note", ""),
         ),
         clock=clock,
     )
@@ -362,3 +363,12 @@ def test_registry_approve_reject_remove(world, conn, budget_port, clock, tmp_pat
     assert a.proposal_id == p2.id
     assert registry.remove("team/go") and registry.approved_repos() == []
     assert p.id != p2.id
+
+
+def test_agent_system_prompt_carries_registries_note(world, conn, budget_port, clock, tmp_path):
+    from maxtac.services.discovery import SYSTEM
+
+    llm = ScriptedLLM([submit(["python"], "", "python -m pytest -q")])
+    svc, _, _ = make(world, conn, budget_port, clock, tmp_path, llm, registries_note="\nNOTE")
+    svc.discover("team/api")
+    assert llm.systems == [SYSTEM + "\nNOTE"]

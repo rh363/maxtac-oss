@@ -6,7 +6,7 @@ import logging
 import os
 import sqlite3
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -39,6 +39,7 @@ from maxtac.domain.ports import NotifierPort, SandboxPort, ScannerPort
 from maxtac.services.discovery import Discovery, DiscoverySettings
 from maxtac.services.pipeline import Pipeline
 from maxtac.services.redaction import RedactingSandboxes
+from maxtac.services.ripperdoc import registries_note
 from maxtac.services.scan import ScanService
 
 log = logging.getLogger(__name__)
@@ -184,6 +185,11 @@ class Container:
             out.append((c.host, user, password))
         return out
 
+    def registries_note(self) -> str:
+        extra, _ = self.extra_registries()
+        hosts = [c.host for c in self.config.sandbox.registry_credentials]
+        return registries_note(extra, hosts)
+
     def redactor(self) -> Redactor:
         return Redactor.for_credentials((u, p) for _, u, p in self.registry_credentials())
 
@@ -271,7 +277,9 @@ class Container:
             store=self.store,
             budget=self.budget,
             pricing=self.config.to_pricing(),
-            settings=self.config.to_settings(dry_run=dry_run),
+            settings=replace(
+                self.config.to_settings(dry_run=dry_run), registries_note=self.registries_note()
+            ),
             clock=self.clock,
             runs=self.runs,
             notifier=notifier,
@@ -294,6 +302,7 @@ class Container:
                 max_iterations=b.discovery_max_iterations,
                 workdir=self.config.workdir,
                 monthly_credits_usd=b.monthly_credits_usd,
+                registries_note=self.registries_note(),
             ),
             clock=self.clock,
         )
