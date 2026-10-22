@@ -7,7 +7,7 @@ ORCH="$1"; WEB="$2"; SBX="$3"
 BASE="docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true"
 RUN="$BASE --tmpfs /tmp"
 # stesse opzioni tmpfs di adapters/docker_sandbox.py: /tmp e home scrivibili dall'utente del sandbox
-TMPFS_OPTS="rw,nosuid,nodev,mode=1777"
+TMPFS_OPTS="rw,exec,nosuid,nodev,mode=1777"   # come DockerSandbox
 
 echo "== orchestrator: CLI"
 $RUN "$ORCH" --help >/dev/null
@@ -44,6 +44,11 @@ ls -l /opt/semgrep-rules && cd /work \
 && /usr/local/bin/semgrep scan --metrics=off --disable-version-check --quiet --disable-nosem \
      --json --output /tmp/sg.json --config /opt/semgrep-rules/p-python.yml . \
 && python -c "import json; r=json.load(open(\"/tmp/sg.json\"))[\"results\"]; assert r, r; print(\"ok:\", len(r), \"finding\")"'
+
+echo "== sandbox: go test esegue i binari compilati in /tmp"
+$SB sh -c 'cd /work && printf "module t\n\ngo 1.21\n" > go.mod \
+&& printf "package t\nimport \"testing\"\nfunc TestOk(t *testing.T) {}\n" > t_test.go \
+&& go test ./... && echo "ok: go test"'
 
 echo "== sandbox: bandit"
 $SB sh -c 'cd /work && printf "import subprocess\nsubprocess.call(input(), shell=True)\n" > app.py \
