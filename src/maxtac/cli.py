@@ -16,7 +16,7 @@ from pathlib import Path
 
 from maxtac import cli_repos
 from maxtac.config import DEFAULT_CONFIG_PATH, AppConfig, load_config, load_secrets
-from maxtac.container import Container, MissingSecret
+from maxtac.container import Container, MissingSecret, RegistryConflict
 from maxtac.domain.models import RepoConfig, RunReport
 from maxtac.domain.policy import next_run_at, token_state
 from maxtac.presentation.lexicon import NEUTRAL, Lexicon, lexicon
@@ -188,6 +188,15 @@ def cmd_status(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
             today=now.date(),
         )
     )
+    extra, conflicts = c.extra_registries()
+    if extra:
+        print(f"registry interni del proxy: {', '.join(extra)}")
+    if conflicts:
+        print(
+            f"ATTENZIONE: {', '.join(conflicts)} copre {c.config.gitlab.host}: i sandbox non "
+            f"partono finché non lo togli da {c.config.sandbox.extra_registries_file}"
+        )
+        return 1
     return 0
 
 
@@ -290,7 +299,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     c = Container.build(cfg)
     try:
         return COMMANDS[args.command](c, args, lx)
-    except MissingSecret as e:
+    except (MissingSecret, RegistryConflict) as e:
         print(f"{lx.product}: {e}", file=sys.stderr)
         return 2
     finally:

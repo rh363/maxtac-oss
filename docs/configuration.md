@@ -178,6 +178,17 @@ autofix.example.it {
 `proxy_url` (`http://proxy:3128`), `user` (`1000:1000`, mai root), `mem_limit` (`4g`), `cpus`
 (2.0), `pids_limit` (512).
 
+`registry_credentials` (vuoto): credenziali di sola lettura per i registry interni, scritte in
+`~/.netrc` di ogni sandbox (le usano pip, git e curl). Ogni voce ha `host` (solo il nome, es.
+`pypi.example.it`) e `secret`: il valore `utente:password` sta in
+`/run/secrets/registry_credentials/<secret>` (dal compose: `secrets/registry_credentials/`),
+senza spazi né virgolette. Un host che copre quello di GitLab è rifiutato al caricamento.
+
+`extra_registries_file` (`/etc/autofix/proxy-local/extra-registries.txt`): l'allowlist locale
+del proxy (`proxy/local/extra-registries.txt` sulla VM, un host per riga, `#` per i commenti),
+letta da squid e dall'orchestrator. Se una voce copre l'host di GitLab (l'host stesso, un
+`.dominio` o un dominio padre) i sandbox non partono e `status` lo segnala.
+
 ### `scanners`
 
 `semgrep.rulesets` (`[p/default]`) e `semgrep.by_language` (ruleset aggiunti per i linguaggi

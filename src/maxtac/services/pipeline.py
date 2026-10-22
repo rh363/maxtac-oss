@@ -25,6 +25,7 @@ from maxtac.domain.models import (
     Verdict,
 )
 from maxtac.domain.policy import (
+    Redactor,
     added_tests,
     adds_test,
     branch_name,
@@ -51,6 +52,7 @@ from maxtac.domain.ports import (
 
 from .hunter import Hunter
 from .merge_request import commit_message, mr_body, mr_title
+from .redaction import redact_report
 from .ripperdoc import AgentOutcome, Ripperdoc
 from .scan import applicable, run_scanners
 from .trauma import Triage
@@ -119,6 +121,8 @@ class Pipeline:
     clock: Callable[[], datetime]
     runs: RunStore | None = None
     notifier: NotifierPort | None = None
+    # credenziali dei registry date al sandbox: mai verso GitLab, report o webhook
+    redactor: Redactor = field(default_factory=Redactor)
 
     def __post_init__(self) -> None:
         m, lim = self.settings.models, self.settings.limits
@@ -169,6 +173,7 @@ class Pipeline:
             report.repos.append(rr)
         report.spent_usd = night.budget.spent
         report.finished_at = self.clock()
+        redact_report(report, self.redactor)
         self._publish(report)
         return report
 
@@ -383,6 +388,15 @@ class Pipeline:
                     return self._failed(repo, task, Outcome.VERIFY_FAILED, meter, why)
 
             diff = self.vcs.diff(co)
+            if self.redactor.leaks(diff):
+                # nemmeno in dry-run: il diff finirebbe su disco
+                return self._failed(
+                    repo,
+                    task,
+                    Outcome.VERIFY_FAILED,
+                    meter,
+                    "il fix contiene una credenziale di un registry: non pubblicato",
+                )
             if self.settings.dry_run:
                 return FixResult(
                     task,
@@ -393,11 +407,14 @@ class Pipeline:
                     diff=diff,
                     test_output=verify_log,
                 )
-            self.vcs.push_branch(co, branch, commit_message(task))
+            red = self.redactor.redact
+            self.vcs.push_branch(co, branch, red(commit_message(task)))
             body = mr_body(
                 task, night.verdicts.get(task.fingerprint), agent.summary, verify_log, meter.spent
             )
-            url = self.vcs.open_mr(repo, branch, mr_title(task), body, self.settings.mr_labels)
+            url = self.vcs.open_mr(
+                repo, branch, red(mr_title(task)), red(body), self.settings.mr_labels
+            )
             for f in task.findings:
                 self._set_status(
                     repo, f, FindingStatus.MR_OPEN, "MR aperta", mr_url=url, branch=branch

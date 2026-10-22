@@ -3,7 +3,8 @@
 Il container vede solo la working tree (bind mount su /work), gira come utente non root
 senza capability, con rootfs in sola lettura, limiti di CPU/RAM/PID e una rete interna la
 cui unica uscita è il proxy con allowlist. Non riceve variabili d'ambiente
-dell'orchestrator: niente chiave Anthropic, niente token GitLab.
+dell'orchestrator: niente chiave Anthropic, niente token GitLab. Riceve al più le
+credenziali di sola lettura dei registry interni, come file ~/.netrc.
 """
 
 from __future__ import annotations
@@ -11,13 +12,15 @@ from __future__ import annotations
 import io
 import logging
 import posixpath
+import re
+import socket
 import tarfile
 import threading
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +53,14 @@ class SandboxSpec:
     pids_limit: int = 512
     tmp_size: str = "1g"
     home_size: str = "4g"
+    # ~/.netrc con le credenziali di sola lettura dei registry interni: entra nel container
+    # come file (scritto da stdin, vedi put_home_file), mai come variabile d'ambiente o argomento
+    netrc: str = field(default="", repr=False)
+
+
+def netrc_text(creds: Iterable[tuple[str, str, str]]) -> str:
+    """Righe di ~/.netrc da (host, utente, password): le usano pip, git e curl."""
+    return "".join(f"machine {h} login {u} password {p}\n" for h, u, p in creds)
 
 
 def _environment(spec: SandboxSpec) -> dict[str, str]:
@@ -228,18 +239,61 @@ class DockerSession:
         code, out, _ = self._exec(["/bin/mkdir", "-p", "--", target])
         if code != 0:
             raise OSError(out.decode("utf-8", errors="replace"))
+        if not self._container.put_archive(target, self._tar(name, content, 0o644)):
+            raise OSError(f"scrittura di {rel} fallita")
+
+    def _tar(self, name: str, content: str, mode: int) -> bytes:
+        """Archivio con un solo file, dell'utente del sandbox."""
         data = content.encode("utf-8")
         uid, _, gid = self._spec.user.partition(":")
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode="w") as tar:
             info = tarfile.TarInfo(name)
             info.size = len(data)
-            info.mode = 0o644
+            info.mode = mode
             info.uid, info.gid = int(uid), int(gid or uid)
             info.mtime = int(time.time())
             tar.addfile(info, io.BytesIO(data))
-        if not self._container.put_archive(target, buf.getvalue()):
-            raise OSError(f"scrittura di {rel} fallita")
+        return buf.getvalue()
+
+    def put_home_file(self, name: str, content: str, mode: int) -> None:
+        """Scrive un file nella home del sandbox (tmpfs) passando il contenuto su stdin.
+
+        put_archive non va: Docker lo rifiuta con il rootfs in sola lettura, anche verso un
+        tmpfs. Il contenuto non compare né nell'argv dell'exec (visibile in `docker events`)
+        né nell'ambiente."""
+        if self.killed:
+            raise RuntimeError("sandbox terminato dal watchdog")
+        if not re.fullmatch(r"\.?[\w.-]+", name):
+            raise ValueError(f"nome di file non valido: {name!r}")
+        api = self._client.api
+        script = f'umask 077 && cat > "$HOME/{name}" && chmod {mode:o} "$HOME/{name}"'
+        exec_id = api.exec_create(
+            self._container.id,
+            [SH_BIN, "-c", script],
+            stdin=True,
+            stdout=True,
+            stderr=True,
+            user=self._spec.user,
+        )["Id"]
+        sock = api.exec_start(exec_id, socket=True)
+        raw = getattr(sock, "_sock", sock)
+        try:
+            raw.settimeout(IO_TIMEOUT)
+            raw.sendall(content.encode("utf-8"))
+            raw.shutdown(socket.SHUT_WR)
+            while raw.recv(4096):
+                pass
+        finally:
+            raw.close()
+        code = None
+        for _ in range(50):
+            code = api.exec_inspect(exec_id).get("ExitCode")
+            if code is not None:
+                break
+            time.sleep(0.1)
+        if code != 0:
+            raise OSError(f"scrittura di ~/{name} nel sandbox fallita (exit={code})")
 
     def list_files(self, path: str) -> list[str]:
         rel = safe_relpath(path)
@@ -291,7 +345,10 @@ class DockerSandbox:
         self._ensure_image()
         container = self.client.containers.run(**run_kwargs(self.spec, worktree.resolve()))
         try:
-            yield DockerSession(self.client, container, self.spec)
+            session = DockerSession(self.client, container, self.spec)
+            if self.spec.netrc:
+                session.put_home_file(".netrc", self.spec.netrc, 0o600)
+            yield session
         finally:
             try:
                 container.remove(force=True)

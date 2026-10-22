@@ -210,6 +210,47 @@ Se i test non passano o ci sono comandi sospetti, `approve` chiede anche `--forc
 alternativa puoi scrivere i repo a mano nella sezione `repos:` del `config.yaml`, che ha
 sempre la precedenza.
 
+### Registry interni
+
+Se i repo scaricano pacchetti da un registry aziendale (un PyPI o un npm interno), l'ambiente
+isolato deve poterlo raggiungere. Di base raggiunge solo PyPI, npm e il proxy dei moduli Go
+pubblici.
+
+**1. Aggiungi l'indirizzo del registry**, uno per riga, in `proxy/local/extra-registries.txt`
+(il file resta sulla VM, fuori da git):
+
+```bash
+mkdir -p proxy/local
+printf '%s\n' npm.example.it pypi.example.it > proxy/local/extra-registries.txt
+docker compose restart proxy
+```
+
+Non scriverci mai l'indirizzo di GitLab: Autofix si rifiuterebbe di partire.
+
+**2. Se il registry chiede utente e password**, crea un utente **di sola lettura** dedicato e
+salvalo nel formato `utente:password`:
+
+```bash
+mkdir -p secrets/registry_credentials
+printf '%s' 'utente:password' > secrets/registry_credentials/pypi
+chown -R 1000:1000 secrets && chmod -R go= secrets
+```
+
+poi indica host e nome del file nel `config.yaml`:
+
+```yaml
+sandbox:
+  registry_credentials:
+    - host: pypi.example.it
+      secret: pypi            # il file secrets/registry_credentials/pypi
+```
+
+e riavvia con `docker compose up -d`. `autofix status` mostra i registry interni in uso.
+
+Il codice dei repo gira accanto a queste credenziali e potrebbe leggerle: per questo l'utente
+deve poter solo scaricare. Autofix le toglie da MR, commit e report, e non pubblica mai un fix
+che le contiene.
+
 ### Prova a costo zero
 
 ```bash
