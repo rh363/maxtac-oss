@@ -315,6 +315,7 @@ class ScriptedLLM:
         self.structured_usage = structured_usage
         self.structured_calls: list[tuple[str, str, str]] = []
         self.turn_calls: list[list[Message]] = []
+        self.systems: list[str] = []
 
     def structured(
         self, *, model: str, system: str, prompt: str, tool: ToolSpec, max_tokens: int
@@ -334,6 +335,7 @@ class ScriptedLLM:
         max_tokens: int,
     ) -> AssistantTurn:
         self.turn_calls.append(list(messages))
+        self.systems.append(system)
         if not self.turns:
             raise AssertionError("ScriptedLLM: turni finiti")
         nxt = self.turns.pop(0)

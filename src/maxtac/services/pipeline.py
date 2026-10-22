@@ -93,6 +93,7 @@ class PipelineSettings:
     branch_prefix: str = "autofix"
     mr_labels: tuple[str, ...] = ("autofix",)
     dry_run: bool = False
+    registries_note: str = ""  # ripperdoc.registries_note: host dei registry interni
 
 
 class SetupFailed(Exception):
@@ -127,7 +128,12 @@ class Pipeline:
     def __post_init__(self) -> None:
         m, lim = self.settings.models, self.settings.limits
         self.triage = Triage(self.llm, m.triage)
-        self.ripperdoc = Ripperdoc(self.llm, m.fix, max_iterations=lim.max_iterations)
+        self.ripperdoc = Ripperdoc(
+            self.llm,
+            m.fix,
+            max_iterations=lim.max_iterations,
+            registries_note=self.settings.registries_note,
+        )
         self.hunter = Hunter(self.llm, m.hunt)
 
     # --- run notturna ---

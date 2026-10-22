@@ -9,6 +9,10 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Fixed
 
+- Autodiscovery e fix: il prompt diceva al modello che il sandbox non ha credenziali, così
+  non provava i registry interni. Ora elenca gli host di `extra-registries.txt` e quelli con
+  credenziali in `~/.netrc` (solo nomi host, mai le credenziali) e chiede di passare a pip
+  l'indice dichiarato dal progetto.
 - Sandbox: `/tmp` e la home erano montati `noexec` (default di Docker per i tmpfs), quindi
   `go test` non poteva eseguire i binari compilati e le estensioni C installate da pip non si
   caricavano. Ora i tmpfs hanno `exec`; `smoke-images.sh` esegue un `go test`.

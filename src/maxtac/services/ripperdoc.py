@@ -7,6 +7,7 @@ clinica (il task), e il paziente non esce finché i test non sono verdi.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,11 +40,36 @@ Rules:
 - For dependency CVEs, bump to the smallest version that fixes all listed
   advisories and update lockfiles consistently.
 - For bugs, add a new regression test file that fails before your fix.
-- The sandbox has no credentials and only package-registry network access.
+- The sandbox has only package-registry network access, no GitLab access and no
+  credentials beyond the read-only registry ones described below (if any).
 - `python` is Python 3.13; `python3.14` is also available. Use the interpreter the
   repository's setup and test commands use (e.g. `python3.14 -m pytest`).
 When the fix is done and tests pass, stop calling tools and reply with a short
 summary of what you changed and why."""
+
+
+def registries_note(registries: Sequence[str], with_credentials: Sequence[str]) -> str:
+    """Righe per il prompt di sistema sui registry interni: solo host, mai credenziali."""
+    if not registries and not with_credentials:
+        return ""
+    lines = ["", "Internal package registries:"]
+    if registries:
+        lines.append(f"- reachable through the proxy: {', '.join(registries)}.")
+    if with_credentials:
+        lines.append(
+            f"- read-only credentials for {', '.join(with_credentials)} are already in"
+            " ~/.netrc: pip and curl use them automatically. Never print, copy or"
+            " pass them on the command line."
+        )
+    lines.append(
+        "- pip does not know these registries unless told: when the project declares one"
+        " (Poetry [[tool.poetry.source]], pip.conf, --index-url in requirements, uv"
+        " indexes), pass that URL explicitly, e.g."
+        " `python -m pip install --extra-index-url https://<host>/simple/ ...`;"
+        " npm reads the project's .npmrc on its own."
+    )
+    return "\n".join(lines)
+
 
 TOOLS = (
     ToolSpec(
@@ -121,6 +147,7 @@ class Ripperdoc:
     model: str
     max_iterations: int = 30
     max_tokens: int = 8192
+    registries_note: str = ""  # vedi registries_note()
 
     def fix(self, repo: RepoConfig, task: Task, sandbox: Sandbox, meter: Meter) -> AgentOutcome:
         messages: list[Message] = [UserText(task_prompt(repo, task))]
@@ -132,7 +159,7 @@ class Ripperdoc:
                 return AgentOutcome(False, last_text, i, "budget")
             turn = self.llm.turn(
                 model=self.model,
-                system=SYSTEM,
+                system=SYSTEM + self.registries_note,
                 messages=messages,
                 tools=TOOLS,
                 max_tokens=self.max_tokens,

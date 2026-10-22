@@ -57,7 +57,8 @@ You inspect a repository checked out at /work inside an isolated sandbox and wor
 how to install its dependencies and run its test suite, so that an automated service
 can later run the tests unattended. The sandbox has Python 3.13 with pip (`python`),
 Python 3.14 (`python3.14`), Go and Node.js with npm; it has only package-registry network
-access and no credentials.
+access, no GitLab access and no credentials beyond the read-only registry ones described
+below (if any).
 Rules:
 - If the project requires Python 3.14 (e.g. requires-python ">=3.14" or "^3.14", or
   requirement markers like python_version >= "3.14"), use python3.14 in both commands:
@@ -214,6 +215,7 @@ class DiscoverySettings:
     workdir: Path
     monthly_credits_usd: float | None = None
     max_tokens: int = 4096
+    registries_note: str = ""  # ripperdoc.registries_note: host dei registry interni
 
 
 @dataclass(frozen=True)
@@ -355,7 +357,7 @@ class Discovery:
             meter.ensure_available()
             turn = self.llm.turn(
                 model=self.settings.model,
-                system=SYSTEM,
+                system=SYSTEM + self.settings.registries_note,
                 messages=messages,
                 tools=TOOLS,
                 max_tokens=self.settings.max_tokens,
