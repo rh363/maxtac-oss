@@ -134,3 +134,30 @@ def test_budget_ledger_since(budget_port):
     rows = budget_port.ledger(T.replace(day=19, hour=0))
     assert [(r.scope, r.usd) for r in rows] == [("triage:a", 0.1), ("fix:a:x", 0.5)]
     assert rows[0].at == T.replace(day=19)
+
+
+def test_repos_table_gains_scan_only_on_old_db(tmp_path):
+    """Un db creato prima di `scan_only` viene migrato: i repo già approvati restano normali."""
+    import sqlite3
+
+    from maxtac.adapters.sqlite_store import SqliteRepoRegistry, connect
+
+    path = tmp_path / "old.sqlite3"
+    old = sqlite3.connect(path)
+    old.execute(
+        "CREATE TABLE repos (project TEXT PRIMARY KEY, languages TEXT NOT NULL, "
+        "setup_command TEXT, test_command TEXT NOT NULL, default_branch TEXT, "
+        "approved_at TEXT NOT NULL, approved_by TEXT NOT NULL, proposal_id INTEGER)"
+    )
+    old.execute(
+        "INSERT INTO repos VALUES ('team/x', '[\"go\"]', NULL, 'go test ./...', NULL, "
+        "'2026-10-01T00:00:00+00:00', 'alex', NULL)"
+    )
+    old.commit()
+    old.close()
+    conn = connect(path)
+    try:
+        [a] = SqliteRepoRegistry(conn).approved_repos()
+        assert a.repo.project == "team/x" and a.repo.scan_only is False
+    finally:
+        conn.close()

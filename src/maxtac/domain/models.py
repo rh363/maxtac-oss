@@ -166,6 +166,9 @@ class RepoConfig:
     test_command: str
     setup_command: str | None = None
     default_branch: str | None = None  # None = quello di GitLab
+    # Solo scan: finding tracciati ma nessun fix né bug hunting (per i repo i cui test non
+    # possono girare nel sandbox, es. dipendenze private che il sandbox non può scaricare)
+    scan_only: bool = False
 
     @property
     def slug(self) -> str:
