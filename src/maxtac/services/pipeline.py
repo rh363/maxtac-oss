@@ -151,7 +151,10 @@ class Pipeline:
         hunt = set()
         if "bug" in s.enabled_kinds:
             picked = pick_hunting_repos(
-                repos, self.store.last_hunted, s.hunting_repos_per_night, self.store.hunt_count
+                [r for r in repos if not r.scan_only],
+                self.store.last_hunted,
+                s.hunting_repos_per_night,
+                self.store.hunt_count,
             )
             hunt = {r.project for r in picked}
 
@@ -218,6 +221,8 @@ class Pipeline:
         )
         rr.findings_new = len(actionable)
         tasks = self._drop_open_mrs(repo, group_into_tasks(actionable), rr)
+        if repo.scan_only:
+            return  # finding tracciati, niente triage, fix né bug hunting
         if tasks:
             to_fix = self._triage(repo, tasks, night, rr)
             self._fix_tasks(co, repo, to_fix, scanners, baseline, night, rr)

@@ -310,6 +310,7 @@ class RepoConf(_Model):
     test_command: str
     setup_command: str | None = None
     default_branch: str | None = None
+    scan_only: bool = False  # finding tracciati, nessun fix né bug hunting
 
     @field_validator("project")
     @classmethod
@@ -389,6 +390,7 @@ class AppConfig(_Model):
                 test_command=r.test_command,
                 setup_command=r.setup_command,
                 default_branch=r.default_branch,
+                scan_only=r.scan_only,
             )
             for r in self.repos
         ]

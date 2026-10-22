@@ -99,7 +99,8 @@ CREATE TABLE IF NOT EXISTS repos (
     default_branch TEXT,
     approved_at TEXT NOT NULL,
     approved_by TEXT NOT NULL,
-    proposal_id INTEGER
+    proposal_id INTEGER,
+    scan_only INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS gitlab_tokens (
     name TEXT PRIMARY KEY,
@@ -145,6 +146,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(findings)")}
     if "detail" not in cols:  # fase 6b: ricerca testuale nella dashboard
         conn.execute("ALTER TABLE findings ADD COLUMN detail TEXT NOT NULL DEFAULT ''")
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(repos)")}
+    if "scan_only" not in cols:  # repo approvati in sola scansione
+        conn.execute("ALTER TABLE repos ADD COLUMN scan_only INTEGER NOT NULL DEFAULT 0")
 
 
 def _like(text: str) -> str:
@@ -509,14 +513,15 @@ class SqliteRepoRegistry:
             self._db.execute(
                 """INSERT INTO repos
                        (project, languages, setup_command, test_command, default_branch,
-                        approved_at, approved_by, proposal_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        approved_at, approved_by, proposal_id, scan_only)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(project) DO UPDATE SET
                        languages = excluded.languages, setup_command = excluded.setup_command,
                        test_command = excluded.test_command,
                        default_branch = excluded.default_branch,
                        approved_at = excluded.approved_at, approved_by = excluded.approved_by,
-                       proposal_id = excluded.proposal_id""",
+                       proposal_id = excluded.proposal_id,
+                       scan_only = excluded.scan_only""",
                 (
                     repo.project,
                     json.dumps(list(repo.languages)),
@@ -526,6 +531,7 @@ class SqliteRepoRegistry:
                     _iso(at),
                     by,
                     proposal.id,
+                    int(repo.scan_only),
                 ),
             )
             if proposal.id is not None:
@@ -557,6 +563,7 @@ class SqliteRepoRegistry:
                 test_command=r["test_command"],
                 setup_command=r["setup_command"],
                 default_branch=r["default_branch"],
+                scan_only=bool(r["scan_only"]),
             ),
             approved_at=datetime.fromisoformat(r["approved_at"]),
             approved_by=r["approved_by"],
