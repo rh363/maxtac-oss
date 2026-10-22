@@ -3,6 +3,9 @@
 ARG PYTHON_VERSION=3.13
 ARG GO_VERSION=1.27.2
 ARG NODE_VERSION=24.21.0
+ARG UV_VERSION=0.13.0
+
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
 FROM golang:${GO_VERSION}-bookworm AS go-tools
 ARG OSV_SCANNER_VERSION=v2.6.0
@@ -27,6 +30,20 @@ COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+# Python 3.14 accanto al 3.13 di default, per i repo che lo richiedono (`python3.14`).
+# CPython standalone gestito da uv, in /opt/python: uv serve solo al build. I pacchetti dei
+# repo vanno nella user site (PIP_USER, ~/.local/lib/python3.14), quindi il marker
+# EXTERNALLY-MANAGED di questa installazione non protegge nulla: lo si supera da env.
+ARG PYTHON_EXTRA_VERSION=3.14.6
+COPY --from=uv /uv /tmp/uv
+RUN UV_PYTHON_INSTALL_DIR=/opt/python UV_PYTHON_INSTALL_BIN=0 \
+      /tmp/uv python install --no-config "${PYTHON_EXTRA_VERSION}" \
+ && ln -s "$(UV_PYTHON_INSTALL_DIR=/opt/python /tmp/uv python find --no-config \
+      --managed-python "${PYTHON_EXTRA_VERSION}")" /usr/local/bin/python3.14 \
+ && rm /tmp/uv && chmod -R a+rX /opt/python \
+ && python3.14 -m pip --version && python3.14 -c "import sqlite3, ssl, ctypes"
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Scanner Python in un venv di sistema, separato dai pacchetti che installa il repo.
 # Dipendenze bloccate con hash (scripts/lock-sandbox-tools.sh): niente transitive a sorpresa.

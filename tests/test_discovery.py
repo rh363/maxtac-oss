@@ -57,6 +57,27 @@ def test_detect_pyproject_extra_go_and_typescript():
     assert d.test_command == "python -m pytest -q && go test ./... && npm test"
 
 
+@pytest.mark.parametrize(
+    "pyproject",
+    [
+        "[project]\nname='x'\nrequires-python='>=3.14'\n",
+        "[tool.poetry.dependencies]\npython='^3.14'\n",
+    ],
+)
+def test_detect_python_314_uses_python314(pyproject: str) -> None:
+    files = {"pyproject.toml": pyproject, "requirements.txt": "django\n"}
+    d = detect(files.keys(), files_reader(files))
+    assert d.setup_command == "python3.14 -m pip install -r requirements.txt"
+    assert d.test_command == "python3.14 -m pytest -q"
+
+
+def test_detect_python_313_keeps_default_python() -> None:
+    files = {"pyproject.toml": "[project]\nname='x'\nrequires-python='>=3.11'\n"}
+    d = detect(files.keys(), files_reader(files))
+    assert d.setup_command == "pip install -e ."
+    assert d.test_command == "python -m pytest -q"
+
+
 def test_detect_npm_default_test_script_is_not_a_test():
     files = {
         "package.json": '{"scripts": {"test": "echo \\"Error: no test specified\\" && exit 1"}}'
@@ -78,6 +99,7 @@ def test_detect_nothing_known():
     ("setup", "test", "expected"),
     [
         ("pip install -r requirements.txt", "python -m pytest -q", []),
+        ("python3.14 -m pip install -r requirements.txt", "python3.14 -m pytest -q", []),
         (None, "go test ./...", []),
         ("npm ci", "npm run test:unit", []),
         (None, "make test", []),
