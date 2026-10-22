@@ -23,7 +23,8 @@ print("spa:", p)'
 
 echo "== sandbox: strumenti"
 SB="$BASE --tmpfs /tmp:$TMPFS_OPTS --tmpfs /home/sandbox:$TMPFS_OPTS --tmpfs /work:uid=1000,gid=1000 --user 1000:1000 $SBX"
-for cmd in "python --version" "go version" "node --version" "npm --version" "git --version" \
+for cmd in "python --version" "python3.14 --version" "python3.14 -m pip --version" \
+           "python3.14 -c 'import sqlite3, ssl, ctypes'" "go version" "node --version" "npm --version" "git --version" \
            "/usr/local/bin/semgrep --version" "/usr/local/bin/bandit --version" \
            "/usr/local/bin/gosec -version" "/usr/local/bin/osv-scanner --version"; do
   echo "\$ $cmd"; $SB sh -c "$cmd"

@@ -40,6 +40,8 @@ Rules:
   advisories and update lockfiles consistently.
 - For bugs, add a new regression test file that fails before your fix.
 - The sandbox has no credentials and only package-registry network access.
+- `python` is Python 3.13; `python3.14` is also available. Use the interpreter the
+  repository's setup and test commands use (e.g. `python3.14 -m pytest`).
 When the fix is done and tests pass, stop calling tools and reply with a short
 summary of what you changed and why."""
 

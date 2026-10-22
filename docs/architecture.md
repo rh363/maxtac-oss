@@ -115,7 +115,7 @@ quando il codice sopra si sposta.
 | sandbox | creati a ogni fase dall'orchestrator sulla rete `autofix_sandbox` (`internal`): uid 1000, `cap_drop: ALL`, `no-new-privileges`, rootfs in sola lettura, limiti CPU/RAM/PID, solo la working tree montata in `/work` |
 | `web` | dashboard in sola lettura (profilo `web`), senza socket Docker né segreti del bot |
 
-L'immagine dei sandbox (Python 3.13, Go, Node LTS, osv-scanner, semgrep, bandit, gosec,
+L'immagine dei sandbox (Python 3.13 come `python` e 3.14 come `python3.14`, Go, Node LTS, osv-scanner, semgrep, bandit, gosec,
 versioni pinnate in `sandbox/Dockerfile`, ruleset semgrep e database OSV inclusi) va
 ricostruita ogni settimana: `scripts/rebuild-sandbox.sh`, da cron (l'esempio è nello script).
 

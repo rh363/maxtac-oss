@@ -300,8 +300,8 @@ def next_run_at(now: datetime, at: str, timezone: str) -> datetime:
 
 TEST_RUNNERS = re.compile(
     r"""(?x)(^|[\s;&|(])(
-        pytest | py\.test | python3?\s+-m\s+(pytest|unittest) | tox | nox | hatch\s+test
-      | (uv|poetry|pdm|pipenv)\s+run\s+(pytest|python3?\s+-m\s+(pytest|unittest)|tox|nox)
+        pytest | py\.test | python(3(\.\d+)?)?\s+-m\s+(pytest|unittest) | tox | nox | hatch\s+test
+      | (uv|poetry|pdm|pipenv)\s+run\s+(pytest|python(3(\.\d+)?)?\s+-m\s+(pytest|unittest)|tox|nox)
       | go\s+test
       | (npm|pnpm|yarn|bun)\s+(run\s+)?test(:\S+)? | npx\s+(jest|vitest|mocha) | jest | vitest
       | make\s+(test|check)\b
