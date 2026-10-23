@@ -9,6 +9,8 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Fixed
 
+- Export Markdown: la colonna Alias non ripete l'advisory e "Corretta in" non mostra le
+  pseudo-versioni Go dei branch di sviluppo.
 - `autofix status` mostra gli host con credenziali dei registry, o avvisa che non ce ne
   sono: una voce mancante in `sandbox.registry_credentials` prima non si vedeva.
 - Autodiscovery e fix: il prompt diceva al modello che il sandbox non ha credenziali, così

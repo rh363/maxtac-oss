@@ -71,3 +71,13 @@ def test_truncation_note_and_non_cve_rows():
 def test_helpers():
     assert cell("a\nb|c") == "a b\\|c"
     assert cve_info("Versioni corrette: nessuna nota") == ("", [], "")
+
+
+def test_alias_list_skips_the_advisory_itself_and_go_pseudo_versions():
+    detail = (
+        "Server panic\nAlias: CVE-1, GHSA-x\n"
+        "Versioni corrette: 1.82.2, 1.84.0-dev.0.20260825144003-d5a41119e0e3,"
+        " 0.0.0-20260101000000-abcdefabcdef"
+    )
+    line = findings_markdown([row(rule="GHSA-x", location="grpc@1.83.0", detail=detail)])
+    assert "| CVE-1 | grpc | 1.83.0 | 1.82.2 | Server panic |" in line.splitlines()[2]

@@ -16,6 +16,9 @@ STATUS = {
     "needs_human": "da rivedere",
     "ignored": "ignorato",
 }
+# pseudo-versioni Go (v0.0.0-20260825144003-d5a41119e0e3): commit di branch di sviluppo,
+# rumore nella colonna "corretta in"
+_PSEUDO = re.compile(r"-(?:[\w.]+\.)?\d{14}-[0-9a-f]{12}$")
 _ADVISORY = re.compile(r"^(CVE|GHSA|PYSEC|GO|RUSTSEC|OSV)-[\w-]+$", re.IGNORECASE)
 
 
@@ -32,7 +35,8 @@ def cve_info(detail: str) -> tuple[str, list[str], str]:
             aliases = [a.strip() for a in line[7:].split(",") if a.strip()]
         elif line.startswith("Versioni corrette: "):
             value = line[19:].strip()
-            fixed = "" if value == "nessuna nota" else value
+            versions = [] if value == "nessuna nota" else value.split(",")
+            fixed = ", ".join(v.strip() for v in versions if not _PSEUDO.search(v.strip()))
         elif i == 0:
             summary = line
     return summary, aliases, fixed
@@ -56,6 +60,7 @@ def findings_markdown(rows: Sequence[FindingRow], total: int | None = None) -> s
     for r in rows:
         if r.kind == "cve":
             summary, aliases, fixed = cve_info(r.detail)
+            aliases = [a for a in aliases if a != r.rule]
             package, _, version = r.location.rpartition("@")
             if not package:
                 package, version = version, ""
