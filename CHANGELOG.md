@@ -9,6 +9,10 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Fixed
 
+- Autodiscovery: i comandi proposti venivano tagliati a 500 caratteri, quindi i setup lunghi
+  (es. molte dipendenze tra virgolette) fallivano con "Unterminated quoted string". Ora restano
+  interi fino a 4000 caratteri; oltre, la proposta del modello si scarta. Il prompt spiega anche
+  come installare i tool di test con un requirements.txt con hash.
 - Export Markdown: la colonna Alias non ripete l'advisory e "Corretta in" non mostra le
   pseudo-versioni Go dei branch di sviluppo.
 - `autofix status` mostra gli host con credenziali dei registry, o avvisa che non ce ne

@@ -69,6 +69,10 @@ Rules:
 - Prefer the project's own test runner (pytest, go test, npm test...). Never propose
   commands that hide failures (`|| true`), use the network beyond package installs, or
   publish anything.
+- If requirements.txt pins hashes (`--hash=`), pip runs in hash-checking mode for the
+  whole call: install extra test tools in a separate pip call with exact `==` pins.
+- Propose exactly the commands you ran successfully: they are run again, as written, in a
+  fresh sandbox.
 - setup_command may be empty when nothing needs installing.
 When you know the answer, call submit_config exactly once."""
 
@@ -226,8 +230,11 @@ class _Proposed:
     rationale: str
 
 
+MAX_COMMAND = 4000  # oltre si scarta la proposta: un comando tagliato non è eseguibile
+
+
 def _clean(cmd: object) -> str:
-    return " ".join(str(cmd or "").split())[:500]
+    return " ".join(str(cmd or "").split())
 
 
 def proposal_diff(current: RepoConfig, proposal: RepoProposal) -> list[str]:
@@ -388,11 +395,12 @@ class Discovery:
         raw = args.get("languages")
         langs = tuple(lang for lang in LANGUAGES if isinstance(raw, list) and lang in raw)
         test = _clean(args.get("test_command"))
-        if not test:
+        setup = _clean(args.get("setup_command"))
+        if not test or len(test) > MAX_COMMAND or len(setup) > MAX_COMMAND:
             return None
         return _Proposed(
             languages=langs or det.languages,
-            setup_command=_clean(args.get("setup_command")) or None,
+            setup_command=setup or None,
             test_command=test,
             rationale=str(args.get("rationale") or "")[:2000],
         )
