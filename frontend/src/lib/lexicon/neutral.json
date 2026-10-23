@@ -261,5 +261,9 @@
 	"token.unknown": "Non verificato",
 	"token.error": "Errore",
 	"field.token": "Token",
-	"token.none": "nessuno: va aggiunto a gitlab.tokens"
+	"token.none": "nessuno: va aggiunto a gitlab.tokens",
+	"find.copyMd": "Copia come Markdown",
+	"find.downloadMd": "Scarica .md",
+	"find.copied": "Tabella copiata",
+	"find.exportError": "Export non riuscito"
 }

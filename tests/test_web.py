@@ -594,3 +594,20 @@ def test_dashboard_exposes_schedule_and_repos(cfg, idp):
     d = c.get("/api/dashboard").json()
     assert d["repos"] and d["max_mrs_per_night"] == cfg.budget.max_mrs_per_night
     assert d["next_run_at"] is not None and d["hunting_per_night"] >= 0
+
+
+def test_findings_export_markdown_follows_filters(cfg, idp):
+    c = _alex(cfg, idp)
+    r = c.get("/api/findings/export.md?repo=alex/ecs2&kind=cve")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/markdown")
+    lines = r.text.splitlines()
+    assert lines[0].startswith("| Severità | Advisory |") and lines[1].startswith("|---|")
+    assert len(lines) == 2 + len([f for f in TASK.findings if f.kind == "cve"])
+    assert f"[MR]({ISSUER}/alex/ecs2/-/merge_requests/7)" in r.text
+    assert "MR aperta" in r.text
+    assert c.get("/api/findings/export.md?status=ignored").text.count("\n") == 2
+    assert c.get("/api/findings/export.md?severity=extreme").status_code == 422
+
+
+def test_findings_export_requires_login(cfg, idp):
+    assert make_client(cfg, idp).get("/api/findings/export.md").status_code == 401

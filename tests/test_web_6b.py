@@ -60,6 +60,8 @@ def cfg(tmp_path):
     reg.save_proposal(
         proposal("alex/web", languages=("typescript",), test_command="npm run test:ci")
     )
+    # una prima discovery di alex/legacy, sostituita da quella sotto
+    reg.save_proposal(proposal("alex/legacy", test_command="pytest"))
     # proposta sospetta, con un path dell'host nell'output
     reg.save_proposal(
         proposal(
@@ -211,6 +213,8 @@ def test_proposals_with_status_blockers_command_and_changes(cfg, alex):
     props = alex.get("/api/repos").json()["proposals"]
     by = {(p["project"], p["status"]): p for p in props}
     assert ("alex/web", "approved") not in by  # le approvate sono già tra i repo
+    assert all(p["status"] != "superseded" for p in props)  # le sostituite non si mostrano
+    assert [p["project"] for p in props].count("alex/legacy") == 1
     update = by[("alex/web", "pending")]
     assert update["approve_command"] == "autofix repos approve alex/web"
     assert update["changes"] == [

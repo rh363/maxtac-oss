@@ -144,6 +144,7 @@ class FindingRow:
     mr_url: str | None
     first_seen: datetime
     last_seen: datetime
+    detail: str = ""  # testo dello scanner (non fidato): solo per l'export Markdown
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { ExternalLink, Search, X } from '@lucide/svelte';
+	import { Copy, Download, ExternalLink, Search, X } from '@lucide/svelte';
 	import { api, type FindingPage } from '$lib/api';
 	import { Async, Badge, PageHeader } from '$lib/svelte/component';
 	import { t } from '$lib/lexicon/index.svelte';
@@ -46,6 +46,28 @@
 		goto(q ? resolve(`/findings${q}` as `/findings?${string}`) : resolve('/findings'), {
 			reset: false
 		});
+	}
+
+	// export Markdown di tutti i finding dei filtri correnti, non solo della pagina
+	let exportMsg = $state('');
+	async function exportMarkdown(mode: 'copy' | 'download') {
+		exportMsg = '';
+		try {
+			const text = await api.findingsMarkdown(toApi(view));
+			if (mode === 'copy') {
+				await navigator.clipboard.writeText(text);
+				exportMsg = t('find.copied');
+				return;
+			}
+			const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }));
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `finding-${(view.repo ?? 'tutti').replaceAll('/', '_')}.md`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch {
+			exportMsg = t('find.exportError');
+		}
 	}
 
 	const filters = $derived([
@@ -155,7 +177,26 @@
 		<section class="card">
 			<div class="border-line text-muted flex justify-between gap-2 border-b px-5 py-3 text-[13px]">
 				<span>{t('find.count', { shown: res.items.length, total: res.total })}</span>
-				<span class="mono">{t('find.sorted')}</span>
+				<span class="flex flex-wrap items-center gap-3">
+					<span class="mono">{t('find.sorted')}</span>
+					{#if res.total > 0}
+						<button
+							type="button"
+							class="text-link flex items-center gap-1.5"
+							onclick={() => exportMarkdown('copy')}
+							><Copy size={14} strokeWidth={1.5} aria-hidden="true" />{t('find.copyMd')}</button
+						>
+						<button
+							type="button"
+							class="text-link flex items-center gap-1.5"
+							onclick={() => exportMarkdown('download')}
+							><Download size={14} strokeWidth={1.5} aria-hidden="true" />{t(
+								'find.downloadMd'
+							)}</button
+						>
+					{/if}
+					<span role="status" aria-live="polite">{exportMsg}</span>
+				</span>
 			</div>
 			{#if res.items.length === 0}
 				<p class="text-muted m-0 px-5 py-4">{t('empty.findings')}</p>

@@ -317,6 +317,7 @@ Comandi utili:
 | `autofix run --repo team/api` | una run vera subito, solo su quel repo |
 | `autofix run --scan-only` | solo gli scanner, gratis |
 | `autofix repos list` | repo attivi e proposte in attesa |
+| `autofix findings --repo team/api --kind cve` | finding come tabella Markdown (`-o file.md` per salvarla) |
 
 **Cambiare orario o budget:** modifica `schedule` o `budget` nel `config.yaml`, poi
 `docker compose restart orchestrator`.
@@ -325,7 +326,9 @@ Comandi utili:
 
 La dashboard mostra in sola lettura tutto quello che fa Autofix: spesa giorno per giorno, MR
 aperte, problemi trovati (con ricerca e filtri), storico delle notti con il dettaglio di ogni
-fix, repo attivi e proposte da approvare, impostazioni in vigore. Non permette di modificare
+fix, repo attivi e proposte da approvare, impostazioni in vigore. Dalla pagina dei problemi
+trovati puoi copiare o scaricare come tabella Markdown tutti quelli dei filtri attivi (per
+esempio le CVE di un progetto). Non permette di modificare
 nulla: le approvazioni si fanno sempre dalla riga di comando. Supporta temi diversi per utente.
 
 L'accesso avviene con l'account GitLab ed è riservato alle persone elencate in configurazione.

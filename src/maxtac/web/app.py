@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 from starlette.middleware.sessions import SessionMiddleware
 
 from maxtac.adapters.sqlite_store import (
@@ -31,6 +31,7 @@ from maxtac.adapters.sqlite_store import (
 from maxtac.config import AppConfig, Secrets, WebConf
 from maxtac.domain.models import FindingQuery, FindingStatus, RepoConfig, Severity
 from maxtac.domain.policy import merge_repos
+from maxtac.presentation.markdown import findings_markdown
 from maxtac.services.dashboard import DashboardService, Scrubber
 
 from . import themes
@@ -232,6 +233,29 @@ def service(request: Request) -> Iterator[DashboardService]:
         conn.close()
 
 
+EXPORT_LIMIT = 2000
+
+
+def _finding_query(
+    kind: str | None,
+    severity: str | None,
+    status: str | None,
+    repo: str | None,
+    q: str | None,
+    limit: int,
+    offset: int,
+) -> FindingQuery:
+    return FindingQuery(
+        project=repo,
+        kind=kind,
+        severity=Severity[severity.upper()] if severity else None,
+        status=FindingStatus(status) if status else None,
+        q=q.strip() or None if q else None,
+        limit=limit,
+        offset=offset,
+    )
+
+
 User = Annotated[str, Depends(current_user)]
 Service = Annotated[DashboardService, Depends(service)]
 
@@ -347,15 +371,7 @@ def _routes(app: FastAPI) -> None:
         limit: Annotated[int, Query(ge=1, le=200)] = 50,
         offset: Annotated[int, Query(ge=0)] = 0,
     ) -> FindingPage:
-        query = FindingQuery(
-            project=repo,
-            kind=kind,
-            severity=Severity[severity.upper()] if severity else None,
-            status=FindingStatus(status) if status else None,
-            q=q.strip() or None if q else None,
-            limit=limit,
-            offset=offset,
-        )
+        query = _finding_query(kind, severity, status, repo, q, limit, offset)
         rows, total = svc.findings(query)
         items = [
             FindingOut.model_validate(
@@ -364,6 +380,27 @@ def _routes(app: FastAPI) -> None:
             for r in rows
         ]
         return FindingPage(items=items, total=total, limit=limit, offset=offset)
+
+    @app.get(
+        "/api/findings/export.md",
+        response_class=PlainTextResponse,
+        responses={200: {"content": {"text/markdown": {}}}},
+    )
+    def findings_export(
+        user: User,
+        svc: Service,
+        kind: KindName | None = None,
+        severity: SeverityName | None = None,
+        status: StatusName | None = None,
+        repo: str | None = None,
+        q: Annotated[str | None, Query(max_length=200)] = None,
+    ) -> PlainTextResponse:
+        """Tutti i finding del filtro (fino a EXPORT_LIMIT) come tabella Markdown neutra."""
+        query = _finding_query(kind, severity, status, repo, q, EXPORT_LIMIT, 0)
+        rows, total = svc.findings(query)
+        return PlainTextResponse(
+            findings_markdown(rows, total), media_type="text/markdown; charset=utf-8"
+        )
 
     @app.get("/api/spend/daily", response_model=SpendSeriesOut)
     def spend_daily(
