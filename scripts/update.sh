@@ -18,9 +18,13 @@ base=$(docker compose --profile sandbox config --images 2>/dev/null | grep autof
 for f in sandbox/local/*.Dockerfile; do
   [ -e "$f" ] || continue
   name=$(basename "$f" .Dockerfile)
-  docker build -q --build-arg "BASE=${base:-ghcr.io/rh363/autofix-sandbox:main}" \
-    -t "autofix-sandbox-$name:local" -f "$f" sandbox/local >/dev/null
-  echo "immagine autofix-sandbox-$name:local ricostruita"
+  # una build fallita non blocca l'aggiornamento: resta l'immagine precedente, se c'è
+  if docker build -q --build-arg "BASE=${base:-ghcr.io/rh363/autofix-sandbox:main}" \
+    -t "autofix-sandbox-$name:local" -f "$f" sandbox/local >/dev/null; then
+    echo "immagine autofix-sandbox-$name:local ricostruita"
+  else
+    echo "ATTENZIONE: build di $f fallita, autofix-sandbox-$name:local non aggiornata" >&2
+  fi
 done
 docker compose $web up -d --remove-orphans
 docker image prune -f >/dev/null

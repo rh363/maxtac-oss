@@ -9,6 +9,9 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Fixed
 
+- `scripts/update.sh`: una build fallita di `sandbox/local/*.Dockerfile` fermava l'aggiornamento
+  prima del riavvio dei servizi; ora avvisa e prosegue. L'esempio mysql nel README usa il
+  pacchetto Debian giusto (`default-libmysqlclient-dev`).
 - Autodiscovery: i comandi proposti venivano tagliati a 500 caratteri, quindi i setup lunghi
   (es. molte dipendenze tra virgolette) fallivano con "Unterminated quoted string". Ora restano
   interi fino a 4000 caratteri; oltre, la proposta del modello si scarta. Il prompt spiega anche

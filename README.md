@@ -272,7 +272,7 @@ ha bisogno crea un'immagine che parte da quella standard, in `sandbox/local/` (f
 ARG BASE=ghcr.io/rh363/autofix-sandbox:main
 FROM ${BASE}
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends libmysqlclient-dev pkg-config \
+RUN apt-get update && apt-get install -y --no-install-recommends default-libmysqlclient-dev pkg-config \
  && rm -rf /var/lib/apt/lists/*
 USER 1000
 ```
