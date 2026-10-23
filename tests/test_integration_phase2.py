@@ -76,7 +76,7 @@ class LocalSandboxes:
         self.opened: list[LocalSandbox] = []
 
     @contextmanager
-    def open(self, worktree: Path) -> Iterator[LocalSandbox]:
+    def open(self, worktree: Path, image: str | None = None) -> Iterator[LocalSandbox]:
         sb = LocalSandbox(worktree)
         self.opened.append(sb)
         yield sb

@@ -73,7 +73,7 @@ class MappedSandboxes:
         self.scratch = scratch
         self.opened: list[MappedSandbox] = []
 
-    def open(self, worktree: Path) -> Any:
+    def open(self, worktree: Path, image: str | None = None) -> Any:
         from contextlib import contextmanager
 
         @contextmanager

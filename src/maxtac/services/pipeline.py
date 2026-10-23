@@ -351,7 +351,7 @@ class Pipeline:
         meter = night.budget.meter(f"fix:{repo.slug}:{task.fingerprint}", lim.per_task_usd)
         try:
             self.vcs.start_branch(co, branch)
-            with self.sandboxes.open(co.worktree) as sb:
+            with self.sandboxes.open(co.worktree, repo.sandbox_image) as sb:
                 self._setup(repo, sb)
                 agent = self.ripperdoc.fix(repo, task, sb, meter)
                 trace.append(agent)
@@ -460,7 +460,7 @@ class Pipeline:
 
     def _run_tests(self, co: Checkout, repo: RepoConfig) -> tuple[bool, int, str]:
         """Setup e test in un sandbox nuovo."""
-        with self.sandboxes.open(co.worktree) as sb:
+        with self.sandboxes.open(co.worktree, repo.sandbox_image) as sb:
             self._setup(repo, sb)
             r = sb.exec(repo.test_command, timeout=TEST_TIMEOUT)
         return r.ok, r.code, truncate(r.output, 8000)
@@ -582,7 +582,7 @@ class Pipeline:
         self.vcs.reset(co)
         diff, files = self.vcs.recent_diff(co, self.settings.lookback_days)
         try:
-            with self.sandboxes.open(co.worktree) as sb:
+            with self.sandboxes.open(co.worktree, repo.sandbox_image) as sb:
                 bugs = self.hunter.hunt(repo, diff, files, sb, meter)
         except BudgetExceeded as e:
             rr.errors.append(f"bug hunting saltato: {e}")

@@ -20,7 +20,7 @@ import time
 import uuid
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -316,21 +316,25 @@ class DockerSandbox:
     def __init__(self, spec: SandboxSpec, client: Any | None = None) -> None:
         self.spec = spec
         self._client = client
-        self._image_ok = False
+        self._images_ok: set[str] = set()
 
-    def _ensure_image(self) -> None:
-        if self._image_ok:
+    def _ensure_image(self, image: str) -> None:
+        if image in self._images_ok:
             return
         try:
-            self.client.images.get(self.spec.image)
+            self.client.images.get(image)
         except Exception as e:
             if type(e).__name__ != "ImageNotFound":
                 raise
-            raise SandboxImageMissing(
-                f"immagine dei sandbox {self.spec.image} assente sull'host: "
+            hint = (
                 "scaricala con scripts/update.sh (o `docker compose --profile sandbox pull`)"
+                if image == self.spec.image
+                else "costruiscila con scripts/update.sh da sandbox/local/ (vedi sandbox.images)"
+            )
+            raise SandboxImageMissing(
+                f"immagine dei sandbox {image} assente sull'host: {hint}"
             ) from None
-        self._image_ok = True
+        self._images_ok.add(image)
 
     @property
     def client(self) -> Any:
@@ -341,13 +345,15 @@ class DockerSandbox:
         return self._client
 
     @contextmanager
-    def open(self, worktree: Path) -> Iterator[DockerSession]:
-        self._ensure_image()
-        container = self.client.containers.run(**run_kwargs(self.spec, worktree.resolve()))
+    def open(self, worktree: Path, image: str | None = None) -> Iterator[DockerSession]:
+        # stesso hardening per ogni immagine: lo impone run_kwargs, non l'immagine
+        spec = replace(self.spec, image=image) if image else self.spec
+        self._ensure_image(spec.image)
+        container = self.client.containers.run(**run_kwargs(spec, worktree.resolve()))
         try:
-            session = DockerSession(self.client, container, self.spec)
-            if self.spec.netrc:
-                session.put_home_file(".netrc", self.spec.netrc, 0o600)
+            session = DockerSession(self.client, container, spec)
+            if spec.netrc:
+                session.put_home_file(".netrc", spec.netrc, 0o600)
             yield session
         finally:
             try:

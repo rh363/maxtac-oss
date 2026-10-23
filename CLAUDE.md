@@ -12,6 +12,9 @@ ci si ferma e si riassume.
 - La chiave Anthropic resta solo nell'orchestrator; il sandbox esegue solo comandi e non riceve
   né la chiave né il token GitLab. Può ricevere solo credenziali di sola lettura dei registry
   interni (`~/.netrc`, su stdin), oscurate da `services/redaction.py` in tutto ciò che esce.
+- L'immagine dei sandbox per repo (`sandbox.images`) viene solo dal config e parte da quella
+  standard; l'hardening lo impone `run_kwargs` per ogni immagine. Scan e rescan usano sempre
+  l'immagine standard.
 - Loop agentico proprio sulla Messages API (non Agent SDK), tool eseguiti nel sandbox via
   docker exec. Il loop vive in `services/ripperdoc.py`, l'adapter fa un passo alla volta.
 - Git dir separata dalla working tree, hooks e fsmonitor disattivati: ogni comando git passa

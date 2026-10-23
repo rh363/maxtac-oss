@@ -127,7 +127,7 @@ def test_redacting_sandbox_hides_credentials_in_output() -> None:
             from contextlib import contextmanager
 
             @contextmanager
-            def open_(worktree: Path) -> Any:
+            def open_(worktree: Path, image: str | None = None) -> Any:
                 yield inner
 
             self.open = open_

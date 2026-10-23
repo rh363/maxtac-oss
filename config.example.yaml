@@ -109,6 +109,10 @@ sandbox:
   # registry_credentials:
   #   - host: pypi.example.it
   #     secret: pypi
+  # Immagine dei sandbox per i repo che chiedono pacchetti di sistema (header C, librerie):
+  # il prefisso più specifico vince. Scan e rescan usano sempre l'immagine standard.
+  # images:
+  #   team/api: autofix-sandbox-mysql:local     # da sandbox/local/mysql.Dockerfile
 
 scanners:
   semgrep:

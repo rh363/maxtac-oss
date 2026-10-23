@@ -36,6 +36,10 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+- Immagine dei sandbox per repo (`sandbox.images`, per prefisso di progetto): per i repo che
+  chiedono pacchetti di sistema. Setup, fix, test, hunting e autodiscovery la usano; scan e
+  rescan restano sull'immagine standard. `scripts/update.sh` costruisce
+  `sandbox/local/<nome>.Dockerfile` come `autofix-sandbox-<nome>:local`.
 - Export dei finding come tabella Markdown (advisory con link a OSV, alias, pacchetto,
   versione, versione corretta, stato, MR): pulsanti "Copia come Markdown" e "Scarica .md"
   nella pagina dei finding, con i filtri attivi, e `autofix findings`.

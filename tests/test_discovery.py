@@ -161,6 +161,7 @@ def make(world, conn, budget_port, clock, tmp_path, llm=None, handler=None, **se
             workdir=tmp_path / "work",
             monthly_credits_usd=settings.pop("monthly_credits_usd", 100.0),
             registries_note=settings.pop("registries_note", ""),
+            sandbox_images=settings.pop("sandbox_images", {}),
         ),
         clock=clock,
     )

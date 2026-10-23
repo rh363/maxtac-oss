@@ -42,8 +42,8 @@ class RedactingSandboxes:
     redactor: Redactor
 
     @contextmanager
-    def open(self, worktree: Path) -> Iterator[RedactingSandbox]:
-        with self.inner.open(worktree) as sb:
+    def open(self, worktree: Path, image: str | None = None) -> Iterator[RedactingSandbox]:
+        with self.inner.open(worktree, image) as sb:
             yield RedactingSandbox(sb, self.redactor)
 
 

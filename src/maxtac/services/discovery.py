@@ -13,8 +13,8 @@ import logging
 import re
 import time
 import tomllib
-from collections.abc import Callable, Collection, Sequence
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Collection, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -31,7 +31,7 @@ from maxtac.domain.models import (
     ToolSpec,
     UserText,
 )
-from maxtac.domain.policy import command_suspicions, truncate
+from maxtac.domain.policy import command_suspicions, resolve_sandbox_image, truncate
 from maxtac.domain.ports import (
     BudgetPort,
     LLMPort,
@@ -220,6 +220,7 @@ class DiscoverySettings:
     monthly_credits_usd: float | None = None
     max_tokens: int = 4096
     registries_note: str = ""  # ripperdoc.registries_note: host dei registry interni
+    sandbox_images: Mapping[str, str] = field(default_factory=dict)  # sandbox.images
 
 
 @dataclass(frozen=True)
@@ -286,13 +287,14 @@ class Discovery:
             self.settings.per_repo_usd,
             self.clock,
         ).meter(f"discovery:{repo.slug}", self.settings.per_repo_usd)
+        image = resolve_sandbox_image(project, self.settings.sandbox_images)
         try:
-            with self.sandboxes.open(co.worktree) as sb:
+            with self.sandboxes.open(co.worktree, image) as sb:
                 files = sb.list_files(".")
                 det = detect(files, lambda path: _try_read(sb, path))
                 proposed = self._propose(project, det, files, sb, meter)
             self.vcs.reset(co)  # i `run` dell'agente non devono influenzare la baseline
-            ok, output, duration = self._baseline(co.worktree, proposed)
+            ok, output, duration = self._baseline(co.worktree, proposed, image)
         finally:
             self.vcs.cleanup(co)
 
@@ -407,11 +409,13 @@ class Discovery:
 
     # --- baseline ---
 
-    def _baseline(self, worktree: Path, p: _Proposed) -> tuple[bool | None, str, float]:
+    def _baseline(
+        self, worktree: Path, p: _Proposed, image: str | None = None
+    ) -> tuple[bool | None, str, float]:
         if not p.test_command:
             return None, "nessun test_command: baseline non eseguita", 0.0
         t0 = self.monotonic()
-        with self.sandboxes.open(worktree) as sb:
+        with self.sandboxes.open(worktree, image) as sb:
             if p.setup_command:
                 r = sb.exec(p.setup_command, timeout=SETUP_TIMEOUT)
                 if not r.ok:
