@@ -9,6 +9,8 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Fixed
 
+- `autofix status` mostra gli host con credenziali dei registry, o avvisa che non ce ne
+  sono: una voce mancante in `sandbox.registry_credentials` prima non si vedeva.
 - Autodiscovery e fix: il prompt diceva al modello che il sandbox non ha credenziali, così
   non provava i registry interni. Ora elenca gli host di `extra-registries.txt` e quelli con
   credenziali in `~/.netrc` (solo nomi host, mai le credenziali) e chiede di passare a pip

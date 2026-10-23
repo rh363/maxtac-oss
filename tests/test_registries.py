@@ -363,6 +363,7 @@ def test_status_shows_extra_registries_and_flags_gitlab(tmp_path: Path, capsys: 
         assert cmd_status(c, argparse.Namespace(), NEUTRAL) == 0
         out = capsys.readouterr().out
         assert "registry interni del proxy: npm.example.it" in out and "GitLab" not in out
+        assert "credenziali dei registry: nessuna" in out
         extra.write_text("npm.example.it\ngitlab.example.it\n")
         assert cmd_status(c, argparse.Namespace(), NEUTRAL) == 1
         assert "ATTENZIONE" in capsys.readouterr().out
@@ -403,3 +404,22 @@ def test_agents_are_told_about_internal_registries(tmp_path: Path, night: Any) -
         REPO, TASK, sandbox(), night.meter("fix", 0.8)
     )
     assert llm.systems == [SYSTEM + note]
+
+
+def test_status_lists_registry_credential_hosts(tmp_path: Path, capsys: Any) -> None:
+    import argparse
+
+    from maxtac.cli import cmd_status
+    from maxtac.presentation.lexicon import NEUTRAL
+
+    c = container(
+        tmp_path,
+        extra_registries_file=str(tmp_path / "none.txt"),
+        registry_credentials=[{"host": "pypi.example.it", "secret": "pypi"}],
+    )
+    try:
+        assert cmd_status(c, argparse.Namespace(), NEUTRAL) == 0
+        out = capsys.readouterr().out
+        assert "credenziali dei registry (~/.netrc dei sandbox): pypi.example.it" in out
+    finally:
+        c.close()
