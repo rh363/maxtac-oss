@@ -372,3 +372,22 @@ def test_agent_system_prompt_carries_registries_note(world, conn, budget_port, c
     svc, _, _ = make(world, conn, budget_port, clock, tmp_path, llm, registries_note="\nNOTE")
     svc.discover("team/api")
     assert llm.systems == [SYSTEM + "\nNOTE"]
+
+
+def test_long_setup_command_is_kept_whole(world, conn, budget_port, clock, tmp_path):
+    from maxtac.services.discovery import MAX_COMMAND
+
+    setup = "pip install " + " ".join(f'"pkg{i}>=1,<2"' for i in range(60))
+    assert 500 < len(setup) < MAX_COMMAND
+    llm = ScriptedLLM([submit(["python"], setup, "python -m pytest -q")])
+    svc, _, _ = make(world, conn, budget_port, clock, tmp_path, llm)
+    assert svc.discover("team/api").setup_command == setup
+
+
+def test_too_long_command_falls_back_to_detection(world, conn, budget_port, clock, tmp_path):
+    from maxtac.services.discovery import MAX_COMMAND
+
+    llm = ScriptedLLM([submit(["python"], "x" * (MAX_COMMAND + 1), "python -m pytest -q")])
+    svc, _, _ = make(world, conn, budget_port, clock, tmp_path, llm)
+    p = svc.discover("team/api")
+    assert p.setup_command == "pip install -r requirements.txt"
