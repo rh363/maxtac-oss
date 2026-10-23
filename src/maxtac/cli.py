@@ -17,9 +17,10 @@ from pathlib import Path
 from maxtac import cli_repos
 from maxtac.config import DEFAULT_CONFIG_PATH, AppConfig, load_config, load_secrets
 from maxtac.container import Container, MissingSecret, RegistryConflict
-from maxtac.domain.models import RepoConfig, RunReport
+from maxtac.domain.models import FindingQuery, FindingStatus, RepoConfig, RunReport, Severity
 from maxtac.domain.policy import next_run_at, token_state
 from maxtac.presentation.lexicon import NEUTRAL, Lexicon, lexicon
+from maxtac.presentation.markdown import findings_markdown
 from maxtac.presentation.report import (
     render_run,
     render_scan,
@@ -57,6 +58,13 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("status", help="spesa del mese, finding, MR aperte e token")
     sub.add_parser("tokens", help="ricontrolla subito i token GitLab: utente, scope e scadenza")
     cli_repos.add_parser(sub)
+
+    fnd = sub.add_parser("findings", help="finding tracciati come tabella Markdown")
+    fnd.add_argument("--repo", help="solo questo progetto (gruppo/nome)")
+    fnd.add_argument("--kind", choices=["cve", "sast", "bug"])
+    fnd.add_argument("--status", choices=[s.value for s in FindingStatus])
+    fnd.add_argument("--severity", choices=[s.name.lower() for s in Severity])
+    fnd.add_argument("-o", "--output", type=Path, help="scrive su file invece che su stdout")
 
     web = sub.add_parser("web", help="dashboard web in sola lettura")
     web.add_argument("--host", help="indirizzo di bind (default: web.host)")
@@ -215,6 +223,28 @@ def cmd_tokens(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
     return 1 if bad else 0
 
 
+FINDINGS_EXPORT_LIMIT = 5000
+
+
+def cmd_findings(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
+    """Tabella sempre neutra: è fatta per essere incollata in issue e documenti."""
+    q = FindingQuery(
+        project=args.repo,
+        kind=args.kind,
+        severity=Severity[args.severity.upper()] if args.severity else None,
+        status=FindingStatus(args.status) if args.status else None,
+        limit=FINDINGS_EXPORT_LIMIT,
+    )
+    rows, total = c.store.list_findings(q)
+    text = findings_markdown(rows, total)
+    if args.output:
+        args.output.write_text(text, encoding="utf-8")
+        print(f"{len(rows)} finding scritti in {args.output}")
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
 def cmd_repos(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
     return cli_repos.run(c, args)
 
@@ -225,6 +255,7 @@ COMMANDS = {
     "status": cmd_status,
     "tokens": cmd_tokens,
     "repos": cmd_repos,
+    "findings": cmd_findings,
 }
 
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}

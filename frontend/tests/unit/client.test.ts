@@ -48,4 +48,15 @@ describe('ApiClient', () => {
 		await c.task('20261020T003000Z', '../x', 'alex/ecs2').catch(() => {});
 		expect(calls[1]?.url).toBe('/api/runs/20261020T003000Z/tasks/..%2Fx?repo=alex%2Fecs2');
 	});
+	it('export Markdown: tutti i filtri tranne la paginazione, solo text/markdown', async () => {
+		const md = new Response('| a |\n', {
+			headers: { 'content-type': 'text/markdown; charset=utf-8' }
+		});
+		const { c, calls } = client(md);
+		expect(
+			await c.findingsMarkdown({ kind: 'cve', repo: 'alex/ecs2', offset: 25, limit: 25 })
+		).toBe('| a |\n');
+		expect(calls[0]?.url).toBe('/api/findings/export.md?kind=cve&repo=alex%2Fecs2');
+		await expect(client(json({})).c.findingsMarkdown()).rejects.toBeInstanceOf(ApiError);
+	});
 });

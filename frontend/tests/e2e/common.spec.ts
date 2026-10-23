@@ -122,7 +122,7 @@ test('repository attivi e proposte dell autodiscovery, senza scritture', async (
 	).toBeVisible();
 
 	const proposals = page.getByTestId('proposal');
-	await expect(proposals).toHaveCount(5); // 3 in attesa, 1 sostituita, 1 rifiutata
+	await expect(proposals).toHaveCount(4); // 3 in attesa, 1 rifiutata: le sostituite non si mostrano
 	const legacy = proposals.filter({ hasText: 'alex/legacy-cron' });
 	await expect(legacy.getByText("il test command ignora l'exit code (|| true)")).toBeVisible();
 	await expect(legacy.getByText('Rossa')).toBeVisible();
@@ -134,7 +134,7 @@ test('repository attivi e proposte dell autodiscovery, senza scritture', async (
 	await expect(
 		update.getByText(`${cli} repos approve alex/status-page`, { exact: true })
 	).toBeVisible();
-	await expect(proposals.filter({ hasText: 'Sostituita' })).toHaveCount(1);
+	await expect(proposals.filter({ hasText: 'Sostituita' })).toHaveCount(0);
 	const rejected = proposals.filter({ hasText: 'Rifiutata' });
 	await expect(rejected.getByText(/(autofix|maxtac) repos approve/)).toHaveCount(0);
 	expect(writes).toEqual([]);

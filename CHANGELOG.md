@@ -30,6 +30,9 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+- Export dei finding come tabella Markdown (advisory con link a OSV, alias, pacchetto,
+  versione, versione corretta, stato, MR): pulsanti "Copia come Markdown" e "Scarica .md"
+  nella pagina dei finding, con i filtri attivi, e `autofix findings`.
 - Sandbox con Python 3.14 (`python3.14`, CPython standalone via uv in `/opt/python`) accanto
   al 3.13 di default, per i repo che richiedono Python 3.14. L'autodiscovery lo usa da sola
   quando `requires-python` (o Poetry) chiede 3.14, e i prompt di discovery e fix lo citano.
@@ -84,6 +87,7 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Changed
 
+- Dashboard: le proposte dell'autodiscovery sostituite da una più recente non si mostrano più.
 - Immagini su GHCR pubbliche: README e go-live non chiedono più `docker login`.
 - Il compose usa le immagini di GHCR (`AUTOFIX_TAG`, oppure `AUTOFIX_*_IMAGE` per digest) e
   tiene `build:` per la build locale; profilo `sandbox` al posto di `build` per l'immagine dei

@@ -67,6 +67,29 @@ export class ApiClient {
 		return this.get('/api/findings', FindingPage, params);
 	}
 
+	/** Tutti i finding dei filtri (senza paginazione) come tabella Markdown. */
+	async findingsMarkdown(filters: FindingFilters = {}): Promise<string> {
+		const params: Record<string, string> = {};
+		for (const [k, v] of Object.entries(filters)) {
+			if (v !== undefined && v !== '' && k !== 'limit' && k !== 'offset') params[k] = String(v);
+		}
+		const path = '/api/findings/export.md';
+		const resp = await this.fetch(this.url(path, params), {
+			method: 'GET',
+			credentials: 'same-origin',
+			headers: { Accept: 'text/markdown' }
+		});
+		if (resp.status === 401) {
+			this.onUnauthorized();
+			throw new ApiError(401, 'login richiesto');
+		}
+		if (!resp.ok) throw new ApiError(resp.status, `${path}: HTTP ${resp.status}`);
+		if (!resp.headers.get('content-type')?.startsWith('text/markdown')) {
+			throw new ApiError(resp.status, `${path}: risposta non Markdown`);
+		}
+		return resp.text();
+	}
+
 	spendDaily(days = 30) {
 		return this.get('/api/spend/daily', SpendSeriesOut, { days: String(days) });
 	}

@@ -305,6 +305,7 @@ class DashboardService:
                     **r.__dict__,
                     "reason": self.scrub.text(r.reason),
                     "mr_url": self.scrub.url(r.mr_url),
+                    "detail": self.scrub.text(r.detail),
                 }
             )
             for r in rows
@@ -403,7 +404,10 @@ class DashboardService:
             return []
         active = {r.project: r for r in self.repos}
         shown = [
-            p for p in self.registry.list_proposals() if p.status is not ProposalStatus.APPROVED
+            p
+            for p in self.registry.list_proposals()
+            # approvate e sostituite non servono più: restano nel db, non in dashboard
+            if p.status not in (ProposalStatus.APPROVED, ProposalStatus.SUPERSEDED)
         ]
         shown.sort(key=lambda p: (p.created_at, p.id or 0), reverse=True)
         out = []

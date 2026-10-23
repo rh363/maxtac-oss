@@ -325,6 +325,7 @@ class SqliteStore:
                 mr_url=r["mr_url"],
                 first_seen=datetime.fromisoformat(r["first_seen"]),
                 last_seen=datetime.fromisoformat(r["last_seen"]),
+                detail=r["detail"],
             )
             for r in rows
         ], int(total["n"])
