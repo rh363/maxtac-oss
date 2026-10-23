@@ -124,7 +124,9 @@ class Sandbox(Protocol):
 
 
 class SandboxPort(Protocol):
-    def open(self, worktree: Path) -> AbstractContextManager[Sandbox]: ...
+    def open(
+        self, worktree: Path, image: str | None = None
+    ) -> AbstractContextManager[Sandbox]: ...  # image None: quella standard
 
 
 class ScannerPort(Protocol):

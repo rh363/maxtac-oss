@@ -261,6 +261,35 @@ Il codice dei repo gira accanto a queste credenziali e potrebbe leggerle: per qu
 deve poter solo scaricare. Autofix le toglie da MR, commit e report, e non pubblica mai un fix
 che le contiene.
 
+### Pacchetti di sistema per un repo
+
+L'ambiente isolato scarica da solo i pacchetti Python, npm e Go, ma non può installare pacchetti
+di sistema (per esempio gli header C che servono a compilare `mysqlclient`). Per un repo che ne
+ha bisogno crea un'immagine che parte da quella standard, in `sandbox/local/` (fuori da git):
+
+```dockerfile
+# sandbox/local/mysql.Dockerfile
+ARG BASE=ghcr.io/rh363/autofix-sandbox:main
+FROM ${BASE}
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends libmysqlclient-dev pkg-config \
+ && rm -rf /var/lib/apt/lists/*
+USER 1000
+```
+
+assegnala ai repo nel `config.yaml` (il prefisso più specifico vince, come per i token):
+
+```yaml
+sandbox:
+  images:
+    team/api: autofix-sandbox-mysql:local
+```
+
+e lancia `./scripts/update.sh`: costruisce `autofix-sandbox-mysql:local` sopra l'immagine
+appena scaricata, e la ricostruisce a ogni aggiornamento. `autofix status` mostra le immagini
+assegnate. Setup, fix e test usano questa immagine; la verifica con gli scanner usa sempre quella
+standard.
+
 ### Prova a costo zero
 
 ```bash

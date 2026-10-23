@@ -201,11 +201,13 @@ class FakeSandboxes:
         self.vcs = vcs
         self.handler = handler
         self.opened: list[FakeSandbox] = []
+        self.images: list[str | None] = []  # immagine chiesta a ogni open, in ordine
 
     @contextmanager
-    def open(self, worktree: Path) -> Iterator[FakeSandbox]:
+    def open(self, worktree: Path, image: str | None = None) -> Iterator[FakeSandbox]:
         sb = FakeSandbox(self.vcs.trees[worktree], lambda c, f: self.handler(c, f))
         self.opened.append(sb)
+        self.images.append(image)
         yield sb
 
 

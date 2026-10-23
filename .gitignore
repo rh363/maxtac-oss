@@ -9,3 +9,4 @@ secrets/
 config.yaml
 *.sqlite3
 proxy/local/
+sandbox/local/

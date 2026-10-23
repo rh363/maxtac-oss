@@ -199,6 +199,8 @@ def cmd_status(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
     extra, conflicts = c.extra_registries()
     if extra:
         print(f"registry interni del proxy: {', '.join(extra)}")
+    for prefix, image in sorted(c.config.sandbox.images.items()):
+        print(f"immagine dei sandbox per {prefix}: {image}")
     creds = [r.host for r in c.config.sandbox.registry_credentials]
     if creds:
         print(f"credenziali dei registry (~/.netrc dei sandbox): {', '.join(creds)}")

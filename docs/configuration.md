@@ -184,6 +184,14 @@ autofix.example.it {
 `/run/secrets/registry_credentials/<secret>` (dal compose: `secrets/registry_credentials/`),
 senza spazi né virgolette. Un host che copre quello di GitLab è rifiutato al caricamento.
 
+`images` (vuoto): immagine dei sandbox per prefisso di progetto, il più specifico vince e `""`
+copre tutti, come per i token. Vale per setup, fix, test, bug hunting e autodiscovery; scan e
+rescan usano sempre `image`, così la verifica gira con gli scanner dell'immagine standard.
+L'immagine deve partire da quella standard (`FROM`) e ricevere solo pacchetti di sistema:
+l'hardening (utente, rootfs in sola lettura, rete, capability) lo impone l'orchestrator a ogni
+avvio, qualunque sia l'immagine. Viene solo dal config, mai dal repo. `scripts/update.sh`
+costruisce `sandbox/local/<nome>.Dockerfile` (fuori da git) come `autofix-sandbox-<nome>:local`.
+
 `extra_registries_file` (`/etc/autofix/proxy-local/extra-registries.txt`): l'allowlist locale
 del proxy (`proxy/local/extra-registries.txt` sulla VM, un host per riga, `#` per i commenti),
 letta da squid e dall'orchestrator. Se una voce copre l'host di GitLab (l'host stesso, un

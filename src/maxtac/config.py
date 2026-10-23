@@ -137,6 +137,20 @@ class SandboxConf(_Model):
     # Registry interni aggiunti all'allowlist del proxy, uno per riga: file locale della VM
     # (proxy/local/extra-registries.txt), letto qui solo per controllare che non copra GitLab.
     extra_registries_file: Path = Path("/etc/autofix/proxy-local/extra-registries.txt")
+    # Immagine per prefisso di progetto (il più specifico vince) per setup, fix, test e
+    # hunting: deve partire dall'immagine standard (FROM), che resta per scan e rescan.
+    # "" copre tutti i progetti.
+    images: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("images")
+    @classmethod
+    def _valid_images(cls, v: dict[str, str]) -> dict[str, str]:
+        for prefix, image in v.items():
+            if prefix and not re.fullmatch(r"[\w.-]+(/[\w.-]+)*", prefix):
+                raise ValueError(f"sandbox.images: prefisso non valido {prefix!r} (es. team/api)")
+            if not re.fullmatch(r"[\w.-]+(/[\w.-]+)*(:[\w.-]+)?(@sha256:[0-9a-f]{64})?", image):
+                raise ValueError(f"sandbox.images: immagine non valida {image!r}")
+        return v
 
 
 def _default_semgrep_by_language() -> dict[str, list[str]]:

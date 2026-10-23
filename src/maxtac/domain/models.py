@@ -170,6 +170,9 @@ class RepoConfig:
     # Solo scan: finding tracciati ma nessun fix né bug hunting (per i repo i cui test non
     # possono girare nel sandbox, es. dipendenze private che il sandbox non può scaricare)
     scan_only: bool = False
+    # immagine dei sandbox di setup, fix, test e hunting (None = quella standard); viene solo
+    # da sandbox.images del config, mai dal repo. Scan e rescan usano sempre la standard.
+    sandbox_image: str | None = None
 
     @property
     def slug(self) -> str:

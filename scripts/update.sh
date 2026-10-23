@@ -12,6 +12,16 @@ web=""
 docker compose --profile web ps --services --status running 2>/dev/null | grep -qx web && web="--profile web"
 # il sandbox va scaricato ma non avviato: lo lancia l'orchestrator a ogni task
 docker compose --profile sandbox $web pull
+# immagini dei sandbox per repo (sandbox.images): sandbox/local/<nome>.Dockerfile diventa
+# autofix-sandbox-<nome>:local, ricostruita sopra l'immagine standard appena scaricata
+base=$(docker compose --profile sandbox config --images 2>/dev/null | grep autofix-sandbox | head -n1)
+for f in sandbox/local/*.Dockerfile; do
+  [ -e "$f" ] || continue
+  name=$(basename "$f" .Dockerfile)
+  docker build -q --build-arg "BASE=${base:-ghcr.io/rh363/autofix-sandbox:main}" \
+    -t "autofix-sandbox-$name:local" -f "$f" sandbox/local >/dev/null
+  echo "immagine autofix-sandbox-$name:local ricostruita"
+done
 docker compose $web up -d --remove-orphans
 docker image prune -f >/dev/null
 echo "$(date -Is) autofix aggiornato"

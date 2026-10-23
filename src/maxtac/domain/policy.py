@@ -387,6 +387,12 @@ def covers(prefix: str, project: str) -> bool:
     return prefix == "" or project == prefix or project.startswith(prefix + "/")
 
 
+def resolve_sandbox_image(project: str, images: Mapping[str, str]) -> str | None:
+    """Immagine del prefisso più specifico di `sandbox.images` che copre `project`."""
+    best = max((p for p in images if covers(p, project)), key=len, default=None)
+    return images[best] if best is not None else None
+
+
 def resolve_token(project: str, scopes: Mapping[str, Sequence[str]]) -> str | None:
     """Nome del token con il prefisso più specifico che copre `project`, o None.
 

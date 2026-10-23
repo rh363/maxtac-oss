@@ -34,7 +34,13 @@ from maxtac.config import (
     read_token_secret,
 )
 from maxtac.domain.models import RepoConfig
-from maxtac.domain.policy import Redactor, merge_repos, registry_conflicts, resolve_token
+from maxtac.domain.policy import (
+    Redactor,
+    merge_repos,
+    registry_conflicts,
+    resolve_sandbox_image,
+    resolve_token,
+)
 from maxtac.domain.ports import NotifierPort, SandboxPort, ScannerPort
 from maxtac.services.discovery import Discovery, DiscoverySettings
 from maxtac.services.pipeline import Pipeline
@@ -98,7 +104,8 @@ class Container:
         for r in repos:
             if resolve_token(r.project, scopes) is None:
                 log.warning("%s: approvato ma nessun token in gitlab.tokens lo copre", r.project)
-        return repos
+        images = self.config.sandbox.images
+        return [replace(r, sandbox_image=resolve_sandbox_image(r.project, images)) for r in repos]
 
     def _client(self, token: str) -> Any:
         if self.gitlab_client is not None:
@@ -303,6 +310,7 @@ class Container:
                 workdir=self.config.workdir,
                 monthly_credits_usd=b.monthly_credits_usd,
                 registries_note=self.registries_note(),
+                sandbox_images=dict(self.config.sandbox.images),
             ),
             clock=self.clock,
         )
