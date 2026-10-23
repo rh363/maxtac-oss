@@ -191,6 +191,11 @@ def cmd_status(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
     extra, conflicts = c.extra_registries()
     if extra:
         print(f"registry interni del proxy: {', '.join(extra)}")
+    creds = [r.host for r in c.config.sandbox.registry_credentials]
+    if creds:
+        print(f"credenziali dei registry (~/.netrc dei sandbox): {', '.join(creds)}")
+    elif extra:
+        print("credenziali dei registry: nessuna (sandbox.registry_credentials vuoto)")
     if conflicts:
         print(
             f"ATTENZIONE: {', '.join(conflicts)} copre {c.config.gitlab.host}: i sandbox non "
