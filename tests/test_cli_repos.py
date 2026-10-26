@@ -9,7 +9,7 @@ import yaml
 from maxtac import cli, cli_repos
 from maxtac.config import load_config
 from maxtac.container import Container
-from maxtac.domain.models import ExecResult
+from maxtac.domain.models import ExecResult, RepoProposal
 from maxtac.services.discovery import Discovery, DiscoverySettings
 
 from .conftest import PRICING
@@ -160,3 +160,85 @@ def test_scan_only_in_config(tmp_path):
     p.write_text(yaml.safe_dump(data))
     repos = load_config(p).to_repos()
     assert repos[0].scan_only and not repos[1].scan_only
+
+
+def test_export_writes_approved_repos_as_config(setup, capsys, tmp_path):
+    """Gli approvati escono nel formato di `repos:`, pronti da spostare nel config.yaml."""
+    assert main(setup, "discover", "--project", "team/new", "--project", "team/red") == 0
+    assert main(setup, "approve", "team/new") == 0
+    assert main(setup, "approve", "team/red", "--scan-only") == 0
+    capsys.readouterr()
+
+    assert main(setup, "export") == 0
+    out = capsys.readouterr().out
+    assert out.startswith("# ") and "default_branch" in out  # il commento spiega come usarlo
+    repos = yaml.safe_load(out)["repos"]
+    assert [r["project"] for r in repos] == ["team/new", "team/red"]  # team/api è già nel config
+    assert repos[0] == {
+        "project": "team/new",
+        "languages": ["go"],
+        "setup_command": "go mod download",
+        "test_command": "go test ./...",
+    }
+    assert repos[1]["scan_only"] is True
+
+    # incollati sotto `repos:` il config li carica uguali
+    data = yaml.safe_load(setup.read_text())
+    data["repos"] += repos
+    p = tmp_path / "merged.yaml"
+    p.write_text(yaml.safe_dump(data))
+    loaded = {r.project: r for r in load_config(p).to_repos()}
+    assert loaded["team/new"].test_command == "go test ./..." and loaded["team/red"].scan_only
+
+    out_file = tmp_path / "export.yaml"
+    assert main(setup, "export", "--project", "team/red", "-o", str(out_file)) == 0
+    assert [r["project"] for r in yaml.safe_load(out_file.read_text())["repos"]] == ["team/red"]
+    assert main(setup, "export", "--project", "team/nope") == 1
+    assert "team/nope" in capsys.readouterr().err
+
+
+def test_export_keeps_long_commands_on_one_line(setup, capsys):
+    assert main(setup, "discover", "--project", "team/new") == 0
+    c = Container.build(load_config(setup))
+    long_cmd = "go test " + " ".join(f"./pkg{i}/..." for i in range(40))
+
+    def editor(path):
+        data = yaml.safe_load(path.read_text())
+        data["test_command"] = long_cmd
+        path.write_text(yaml.safe_dump(data))
+
+    try:
+        args = argparse.Namespace(project="team/new", edit=True, force=True)
+        assert cli_repos.cmd_approve(c, args, editor=editor) == 0
+    finally:
+        c.close()
+    capsys.readouterr()
+    assert main(setup, "export") == 0
+    out = capsys.readouterr().out
+    assert f"test_command: {long_cmd}\n" in out
+    assert yaml.safe_load(out)["repos"][0]["test_command"] == long_cmd
+
+
+def test_remove_drops_approved_shadowed_by_config(setup, capsys):
+    """Dopo averlo spostato nel config.yaml, l'approvato (ignorato) si può togliere."""
+    c = Container.build(load_config(setup))
+    try:
+        p = RepoProposal(
+            project="team/api",
+            languages=("python",),
+            setup_command=None,
+            test_command="pytest",
+            rationale="",
+            baseline_ok=True,
+            baseline_output="",
+            duration_s=0,
+            cost_usd=0,
+            created_at=c.clock(),
+        )
+        c.registry.approve(p, p.to_repo(), "op", c.clock())
+        assert c.registry.approved("team/api") is not None
+    finally:
+        c.close()
+    assert main(setup, "remove", "team/api") == 0
+    assert "config.yaml" in capsys.readouterr().out
+    assert main(setup, "remove", "team/api") == 1

@@ -194,6 +194,7 @@ class GitLabVCS:
         self._allow_file = allow_file_protocol
         self._projects: dict[str, Any] = {}
         self._base_branch: dict[str, str] = {}
+        self._user_ids: dict[str, int | None] = {}
 
     # --- API ---
 
@@ -228,17 +229,32 @@ class GitLabVCS:
         self, repo: RepoConfig, branch: str, title: str, body: str, labels: Sequence[str]
     ) -> str:
         target = self._base_branch.get(repo.project) or self._default_branch(repo)
-        mr = self._project(repo.project).mergerequests.create(
-            {
-                "source_branch": branch,
-                "target_branch": target,
-                "title": title,
-                "description": body,
-                "labels": ",".join(labels),
-                "remove_source_branch": True,
-            }
-        )
+        data: dict[str, Any] = {
+            "source_branch": branch,
+            "target_branch": target,
+            "title": title,
+            "description": body,
+            "labels": ",".join(labels),
+            "remove_source_branch": True,
+        }
+        reviewer_ids = [i for u in repo.reviewers if (i := self._user_id(u)) is not None]
+        if reviewer_ids:
+            data["reviewer_ids"] = reviewer_ids
+        mr = self._project(repo.project).mergerequests.create(data)
         return str(mr.web_url)
+
+    def _user_id(self, username: str) -> int | None:
+        """Id GitLab di un reviewer; uno sconosciuto si salta (la MR si apre comunque)."""
+        if username not in self._user_ids:
+            try:
+                users = list(self._gl.users.list(username=username, get_all=False))
+            except Exception as e:  # 403, rete: meglio una MR senza reviewer che nessuna MR
+                log.warning("reviewer %s: ricerca fallita (%s)", username, type(e).__name__)
+                return None  # non in cache: si riprova alla prossima MR
+            self._user_ids[username] = int(users[0].id) if users else None
+            if not users:
+                log.warning("reviewer %s: utente non trovato su GitLab, MR senza", username)
+        return self._user_ids[username]
 
     # --- git ---
 

@@ -39,6 +39,12 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+- Reviewer delle MR per prefisso di progetto (`vcs.reviewers`, username GitLab): il prefisso
+  più specifico vince, una lista vuota li toglie. Uno username sconosciuto si salta con un
+  avviso e la MR si apre comunque; `autofix status` li mostra.
+- `autofix repos export`: stampa (o scrive con `-o`) i repo approvati nel formato di `repos:`
+  del `config.yaml`, per spostarli lì e impostare per esempio `default_branch`. `repos remove`
+  toglie anche l'approvato di un repo che ora sta nel config.yaml.
 - Immagine dei sandbox per repo (`sandbox.images`, per prefisso di progetto): per i repo che
   chiedono pacchetti di sistema. Setup, fix, test, hunting e autodiscovery la usano; scan e
   rescan restano sull'immagine standard. `scripts/update.sh` costruisce

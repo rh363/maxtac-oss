@@ -220,6 +220,28 @@ autofix repos approve team/api --scan-only
 In alternativa puoi scrivere i repo a mano nella sezione `repos:` del `config.yaml`, che ha
 sempre la precedenza.
 
+**Spostare gli approvati nel `config.yaml`.** Serve per esempio per scegliere il branch da
+analizzare, su cui si aprono anche le MR (`default_branch`; senza, è quello di default di
+GitLab). `export` stampa gli approvati già nel formato di `repos:`:
+
+```bash
+autofix repos export -o /var/lib/autofix/repos.yaml   # tutti (o --project team/api, ripetibile)
+# incolla le voci sotto `repos:` del config.yaml, aggiungi `default_branch: develop` dove serve
+autofix repos remove team/api                         # toglie l'approvato: resta quello del config
+```
+
+`autofix` gira in un container: con `-o` usa un path sotto `/var/lib/autofix`, l'unico che
+si ritrova uguale sulla VM.
+
+**Reviewer delle MR.** Nel `config.yaml`, per gruppo o per progetto (vince il più specifico):
+
+```yaml
+vcs:
+  reviewers:
+    team: [alice]            # tutti i repo di team/...
+    team/api: [alice, bob]   # questo repo
+```
+
 ### Registry interni
 
 Se i repo scaricano pacchetti da un registry aziendale (un PyPI o un npm interno), l'ambiente
@@ -346,7 +368,8 @@ Comandi utili:
 | `autofix run --repo team/api` | una run vera subito, solo su quel repo |
 | `autofix run --scan-only` | solo gli scanner, gratis |
 | `autofix repos list` | repo attivi e proposte in attesa |
-| `autofix findings --repo team/api --kind cve` | finding come tabella Markdown (`-o file.md` per salvarla) |
+| `autofix repos export` | repo approvati nel formato di `repos:` del `config.yaml` |
+| `autofix findings --repo team/api --kind cve` | finding come tabella Markdown (`-o /var/lib/autofix/cve.md` per salvarla sulla VM) |
 
 **Cambiare orario o budget:** modifica `schedule` o `budget` nel `config.yaml`, poi
 `docker compose restart orchestrator`.
