@@ -166,7 +166,8 @@ autofix repos list                            # config, approvati e proposte in 
 autofix repos show team/api                   # proposta completa, baseline, differenze
 autofix repos approve team/api [--edit] [--force]
 autofix repos reject team/api
-autofix repos remove team/api                 # solo repo approvati, non quelli del config
+autofix repos remove team/api                 # toglie l'approvato (il config.yaml resta)
+autofix repos export [--project team/api] [-o repos.yaml]   # approvati come voci di `repos:`
 ```
 
 Per ogni progetto: checkout blindato come nella run notturna, rilevamento deterministico dei

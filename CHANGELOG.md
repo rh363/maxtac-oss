@@ -39,6 +39,9 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+- `autofix repos export`: stampa (o scrive con `-o`) i repo approvati nel formato di `repos:`
+  del `config.yaml`, per spostarli lì e impostare per esempio `default_branch`. `repos remove`
+  toglie anche l'approvato di un repo che ora sta nel config.yaml.
 - Immagine dei sandbox per repo (`sandbox.images`, per prefisso di progetto): per i repo che
   chiedono pacchetti di sistema. Setup, fix, test, hunting e autodiscovery la usano; scan e
   rescan restano sull'immagine standard. `scripts/update.sh` costruisce

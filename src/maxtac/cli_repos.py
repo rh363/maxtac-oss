@@ -47,9 +47,12 @@ def add_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None
     for name, help_ in (
         ("show", "mostra la proposta in attesa (e le differenze dall'approvato)"),
         ("reject", "rifiuta la proposta in attesa"),
-        ("remove", "toglie un repo approvato (non quelli del config.yaml)"),
+        ("remove", "toglie un repo approvato (quelli del config.yaml restano)"),
     ):
         rs.add_parser(name, help=help_).add_argument("project")
+    e = rs.add_parser("export", help="repo approvati in YAML, da spostare nel config.yaml")
+    e.add_argument("--project", action="append", help="solo questo progetto (ripetibile)")
+    e.add_argument("-o", "--output", type=Path, help="scrive su file invece che su stdout")
     a = rs.add_parser("approve", help="rende la proposta config di fiducia")
     a.add_argument("project")
     a.add_argument("--edit", action="store_true", help="corregge i comandi con $EDITOR")
@@ -271,10 +274,64 @@ def cmd_reject(c: Container, args: argparse.Namespace) -> int:
     return 0
 
 
+EXPORT_HEADER = """\
+# Repo approvati con `autofix repos approve`, nel formato di `repos:` del config.yaml.
+# Spostali sotto `repos:`: lì vincono sugli approvati, che poi togli con `autofix repos remove`.
+# Per analizzare un branch diverso dal default di GitLab (e aprire lì le MR) aggiungi
+# `default_branch: <branch>`.
+"""
+
+
+def _repo_entry(r: RepoConfig) -> dict[str, object]:
+    entry: dict[str, object] = {"project": r.project, "languages": list(r.languages)}
+    if r.setup_command:
+        entry["setup_command"] = r.setup_command
+    entry["test_command"] = r.test_command
+    if r.default_branch:
+        entry["default_branch"] = r.default_branch
+    if r.scan_only:
+        entry["scan_only"] = True
+    RepoConf.model_validate(entry)  # quello che esce si ricarica dal config
+    return entry
+
+
+def cmd_export(c: Container, args: argparse.Namespace) -> int:
+    configured = {r.project for r in c.config.to_repos()}
+    approved = {
+        a.repo.project: a.repo
+        for a in c.registry.approved_repos()
+        if a.repo.project not in configured
+    }
+    projects = args.project or sorted(approved)
+    missing = [p for p in projects if p not in approved]
+    if missing:
+        for p in missing:
+            print(f"{p}: non è tra i repo approvati fuori dal config.yaml", file=sys.stderr)
+        return 1
+    body = yaml.safe_dump(
+        {"repos": [_repo_entry(approved[p]) for p in projects]},
+        sort_keys=False,
+        allow_unicode=True,
+        width=1_000_000,  # comandi su una riga, come li si scriverebbe a mano
+    )
+    text = EXPORT_HEADER + body
+    if args.output:
+        args.output.write_text(text, encoding="utf-8")
+        print(f"{len(projects)} repo scritti in {args.output}")
+    else:
+        print(text, end="")
+    return 0
+
+
 def cmd_remove(c: Container, args: argparse.Namespace) -> int:
-    if args.project in {r.project for r in c.config.to_repos()}:
+    in_config = args.project in {r.project for r in c.config.to_repos()}
+    if in_config and c.registry.approved(args.project) is None:
         print(f"{args.project}: è nel config.yaml, toglilo da lì", file=sys.stderr)
         return 1
+    if in_config:
+        c.registry.remove(args.project)
+        print(f"{args.project}: rimosso l'approvato, resta quello del config.yaml")
+        return 0
     if not c.registry.remove(args.project):
         print(f"{args.project}: non è tra i repo approvati", file=sys.stderr)
         return 1
@@ -289,6 +346,7 @@ COMMANDS: dict[str, Callable[[Container, argparse.Namespace], int]] = {
     "approve": cmd_approve,
     "reject": cmd_reject,
     "remove": cmd_remove,
+    "export": cmd_export,
 }
 
 
