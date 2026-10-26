@@ -129,6 +129,12 @@ costa token.
 
 `branch_prefix` (`autofix`) e `mr_labels` (`[autofix]`): branch `autofix/<kind>/<fingerprint>`.
 
+`reviewers`: username GitLab (senza `@`) da mettere come reviewer delle MR, per prefisso di
+progetto come i token: vince il prefisso più specifico, `""` copre tutti i progetti e una lista
+vuota toglie i reviewer di un prefisso più ampio. Devono avere accesso al progetto. Uno
+username che GitLab non trova si salta con un avviso nel log: la MR si apre comunque.
+`autofix status` mostra i reviewer configurati.
+
 ### `notify`
 
 `webhook: true` invia il riepilogo del mattino con una POST JSON (formato compatibile con gli

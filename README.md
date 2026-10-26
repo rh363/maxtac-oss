@@ -233,6 +233,15 @@ autofix repos remove team/api                         # toglie l'approvato: rest
 `autofix` gira in un container: con `-o` usa un path sotto `/var/lib/autofix`, l'unico che
 si ritrova uguale sulla VM.
 
+**Reviewer delle MR.** Nel `config.yaml`, per gruppo o per progetto (vince il più specifico):
+
+```yaml
+vcs:
+  reviewers:
+    team: [alice]            # tutti i repo di team/...
+    team/api: [alice, bob]   # questo repo
+```
+
 ### Registry interni
 
 Se i repo scaricano pacchetti da un registry aziendale (un PyPI o un npm interno), l'ambiente

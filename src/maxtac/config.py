@@ -229,6 +229,20 @@ class FeaturesConf(_Model):
 class VCSConf(_Model):
     branch_prefix: str = Field(default="autofix", pattern=r"^[a-z0-9][a-z0-9._-]*$")
     mr_labels: list[str] = Field(default_factory=lambda: ["autofix"])
+    # Reviewer delle MR (username GitLab) per prefisso di progetto, il più specifico vince;
+    # "" copre tutti i progetti, una lista vuota toglie quelli di un prefisso più ampio.
+    reviewers: dict[str, list[str]] = Field(default_factory=dict)
+
+    @field_validator("reviewers")
+    @classmethod
+    def _valid_reviewers(cls, v: dict[str, list[str]]) -> dict[str, list[str]]:
+        for prefix, users in v.items():
+            if prefix and not re.fullmatch(r"[\w.-]+(/[\w.-]+)*", prefix):
+                raise ValueError(f"vcs.reviewers: prefisso non valido {prefix!r} (es. team/api)")
+            for user in users:
+                if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", user):
+                    raise ValueError(f"vcs.reviewers: username non valido {user!r} (senza @)")
+        return v
 
 
 class NotifyConf(_Model):

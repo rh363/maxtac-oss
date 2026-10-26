@@ -387,10 +387,21 @@ def covers(prefix: str, project: str) -> bool:
     return prefix == "" or project == prefix or project.startswith(prefix + "/")
 
 
+def _most_specific(project: str, prefixes: Iterable[str]) -> str | None:
+    return max((p for p in prefixes if covers(p, project)), key=len, default=None)
+
+
 def resolve_sandbox_image(project: str, images: Mapping[str, str]) -> str | None:
     """Immagine del prefisso più specifico di `sandbox.images` che copre `project`."""
-    best = max((p for p in images if covers(p, project)), key=len, default=None)
+    best = _most_specific(project, images)
     return images[best] if best is not None else None
+
+
+def resolve_reviewers(project: str, reviewers: Mapping[str, Sequence[str]]) -> tuple[str, ...]:
+    """Reviewer del prefisso più specifico di `vcs.reviewers`; una lista vuota toglie quelli
+    di un prefisso più ampio."""
+    best = _most_specific(project, reviewers)
+    return tuple(reviewers[best]) if best is not None else ()
 
 
 def resolve_token(project: str, scopes: Mapping[str, Sequence[str]]) -> str | None:

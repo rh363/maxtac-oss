@@ -38,6 +38,7 @@ from maxtac.domain.policy import (
     Redactor,
     merge_repos,
     registry_conflicts,
+    resolve_reviewers,
     resolve_sandbox_image,
     resolve_token,
 )
@@ -104,8 +105,15 @@ class Container:
         for r in repos:
             if resolve_token(r.project, scopes) is None:
                 log.warning("%s: approvato ma nessun token in gitlab.tokens lo copre", r.project)
-        images = self.config.sandbox.images
-        return [replace(r, sandbox_image=resolve_sandbox_image(r.project, images)) for r in repos]
+        images, reviewers = self.config.sandbox.images, self.config.vcs.reviewers
+        return [
+            replace(
+                r,
+                sandbox_image=resolve_sandbox_image(r.project, images),
+                reviewers=resolve_reviewers(r.project, reviewers),
+            )
+            for r in repos
+        ]
 
     def _client(self, token: str) -> Any:
         if self.gitlab_client is not None:

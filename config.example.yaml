@@ -65,6 +65,11 @@ hunting:
 vcs:
   branch_prefix: autofix
   mr_labels: [autofix]
+  # reviewer delle MR (username GitLab) per prefisso di progetto, il più specifico vince
+  # reviewers:
+  #   team: [alice]
+  #   team/api: [alice, bob]
+  #   team/legacy: []          # nessun reviewer per questo repo
 
 # Tema della CLI (e in futuro della dashboard) per utente. Non cambia nulla su GitLab.
 notify:

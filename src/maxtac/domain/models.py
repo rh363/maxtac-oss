@@ -173,6 +173,8 @@ class RepoConfig:
     # immagine dei sandbox di setup, fix, test e hunting (None = quella standard); viene solo
     # da sandbox.images del config, mai dal repo. Scan e rescan usano sempre la standard.
     sandbox_image: str | None = None
+    # username GitLab dei reviewer delle MR; vengono da vcs.reviewers del config
+    reviewers: tuple[str, ...] = ()
 
     @property
     def slug(self) -> str:
