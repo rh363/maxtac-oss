@@ -59,10 +59,18 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("tokens", help="ricontrolla subito i token GitLab: utente, scope e scadenza")
     cli_repos.add_parser(sub)
 
-    fnd = sub.add_parser("findings", help="finding tracciati come tabella Markdown")
+    fnd = sub.add_parser(
+        "findings",
+        help="finding tracciati come tabella Markdown; `reopen` li riporta a nuovi",
+        description="Senza azione stampa la tabella Markdown. `findings reopen --repo P` "
+        "riporta a nuovi i finding ignorati e quelli con MR (anche chiusa), così la run "
+        "successiva riapre le MR con il config attuale (branch, reviewer).",
+    )
+    fnd.add_argument("action", nargs="?", choices=["reopen"], help="reopen: riapri i finding")
     fnd.add_argument("--repo", help="solo questo progetto (gruppo/nome)")
     fnd.add_argument("--kind", choices=["cve", "sast", "bug"])
     fnd.add_argument("--status", choices=[s.value for s in FindingStatus])
+    fnd.add_argument("--rule", action="append", help="reopen: solo questa regola (ripetibile)")
     fnd.add_argument("--severity", choices=[s.name.lower() for s in Severity])
     fnd.add_argument("-o", "--output", type=Path, help="scrive su file invece che su stdout")
 
@@ -230,8 +238,34 @@ def cmd_tokens(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
 FINDINGS_EXPORT_LIMIT = 5000
 
 
+# Senza --status: gli ignorati (MR chiusa senza merge, triage) e quelli con MR, per rifarla.
+# I fix falliti (needs_human) si riaprono solo se chiesti: di solito c'è da guardare prima.
+REOPEN_DEFAULT = (FindingStatus.IGNORED, FindingStatus.MR_OPEN)
+
+
+def cmd_reopen(c: Container, args: argparse.Namespace) -> int:
+    if not args.repo:
+        print("findings reopen: serve --repo", file=sys.stderr)
+        return 2
+    statuses = (FindingStatus(args.status),) if args.status else REOPEN_DEFAULT
+    if FindingStatus.NEW in statuses:
+        print("findings reopen: i finding nuovi non vanno riaperti", file=sys.stderr)
+        return 2
+    n = c.store.reopen(args.repo, statuses, args.rule or ())
+    if not n:
+        print(f"{args.repo}: nessun finding da riaprire", file=sys.stderr)
+        return 1
+    print(
+        f"{args.repo}: {n} finding riaperti, la prossima run rifà le MR "
+        "(una MR ancora aperta resta quella)"
+    )
+    return 0
+
+
 def cmd_findings(c: Container, args: argparse.Namespace, lx: Lexicon) -> int:
     """Tabella sempre neutra: è fatta per essere incollata in issue e documenti."""
+    if args.action == "reopen":
+        return cmd_reopen(c, args)
     q = FindingQuery(
         project=args.repo,
         kind=args.kind,

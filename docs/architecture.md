@@ -33,7 +33,7 @@ Per ogni repo, in sequenza (un repo che fallisce non blocca gli altri):
 2. scan nel sandbox, senza token;
 3. dedup contro lo storico del repo (lo stesso finding in due repo sono due finding): si
    scartano finding ignorati, già con MR aperta, già passati a un umano o falliti troppe volte.
-   Una MR chiusa senza merge conta come rifiuto. Il fingerprint non contiene la riga: un
+   Una MR chiusa senza merge conta come rifiuto (`autofix findings reopen` lo annulla). Il fingerprint non contiene la riga: un
    finding SAST resta lo stesso quando il codice si sposta;
 4. le CVE dello stesso package diventano un solo task (un solo bump);
 5. triage (Haiku): una chiamata per repo, risposta JSON vincolata da schema: `fix`, `ignore`,

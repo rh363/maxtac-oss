@@ -233,6 +233,18 @@ autofix repos remove team/api                         # toglie l'approvato: rest
 `autofix` gira in un container: con `-o` usa un path sotto `/var/lib/autofix`, l'unico che
 si ritrova uguale sulla VM.
 
+**MR da rifare.** Una MR chiusa senza merge vale come rifiuto: il finding diventa "ignorato" e
+Autofix non la ripropone. Per farla rifare (per esempio dopo aver cambiato `default_branch` o i
+reviewer) chiudi la MR su GitLab e riapri i finding; la run successiva apre le MR nuove:
+
+```bash
+autofix findings reopen --repo team/api                     # ignorati e con MR
+autofix findings reopen --repo team/api --rule CVE-2025-1234 # solo questa regola
+autofix findings reopen --repo team/api --status needs_human # i fix falliti, da riprovare
+```
+
+Una MR ancora aperta resta quella: Autofix non ne apre un doppione.
+
 **Reviewer delle MR.** Nel `config.yaml`, per gruppo o per progetto (vince il più specifico):
 
 ```yaml
@@ -369,6 +381,7 @@ Comandi utili:
 | `autofix run --scan-only` | solo gli scanner, gratis |
 | `autofix repos list` | repo attivi e proposte in attesa |
 | `autofix repos export` | repo approvati nel formato di `repos:` del `config.yaml` |
+| `autofix findings reopen --repo team/api` | riapre i finding ignorati e quelli con MR: la run dopo rifà le MR |
 | `autofix findings --repo team/api --kind cve` | finding come tabella Markdown (`-o /var/lib/autofix/cve.md` per salvarla sulla VM) |
 
 **Cambiare orario o budget:** modifica `schedule` o `budget` nel `config.yaml`, poi
