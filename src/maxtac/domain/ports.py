@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from contextlib import AbstractContextManager
 from datetime import datetime
 from pathlib import Path
@@ -183,6 +183,13 @@ class FindingStore(Protocol):
     ) -> None: ...
 
     def record_failed_attempt(self, project: str, fingerprint: str, reason: str) -> int: ...
+
+    def reopen(
+        self, project: str, statuses: Collection[FindingStatus], rules: Collection[str] = ()
+    ) -> int:
+        """Riporta a `new` (tentativi azzerati, niente MR) i finding del repo in `statuses`,
+        filtrati per regola se `rules` non è vuoto. Restituisce quanti ne ha cambiati."""
+        ...
 
     def last_hunted(self, project: str) -> datetime | None: ...
 

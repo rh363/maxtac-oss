@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -229,6 +229,23 @@ class SqliteStore:
                WHERE project = ? AND fingerprint = ?""",
             (status.value, reason, mr_url, branch, project, fingerprint),
         )
+
+    def reopen(
+        self, project: str, statuses: Collection[FindingStatus], rules: Collection[str] = ()
+    ) -> int:
+        if not statuses:
+            return 0
+        where = f"project = ? AND status IN ({', '.join('?' * len(statuses))})"
+        params: list[str] = [project, *(s.value for s in statuses)]
+        if rules:
+            where += f" AND rule IN ({', '.join('?' * len(rules))})"
+            params += list(rules)
+        cur = self._db.execute(
+            f"""UPDATE findings SET status = ?, reason = ?, attempts = 0, mr_url = NULL,
+                   branch = NULL WHERE {where}""",
+            [FindingStatus.NEW.value, "riaperto a mano", *params],
+        )
+        return cur.rowcount
 
     def record_failed_attempt(self, project: str, fingerprint: str, reason: str) -> int:
         row = self._db.execute(

@@ -39,6 +39,10 @@ adotta il [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+- `autofix findings reopen --repo P [--rule R] [--status S]`: riporta a nuovi i finding ignorati
+  (per esempio dopo una MR chiusa senza merge) e quelli con MR, azzerando i tentativi; la run
+  successiva rifà le MR con il config attuale (branch, reviewer). Una MR ancora aperta non viene
+  duplicata.
 - Reviewer delle MR per prefisso di progetto (`vcs.reviewers`, username GitLab): il prefisso
   più specifico vince, una lista vuota li toglie. Uno username sconosciuto si salta con un
   avviso e la MR si apre comunque; `autofix status` li mostra.
